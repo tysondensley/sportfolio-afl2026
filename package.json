@@ -1,0 +1,12 @@
+{
+  "name": "sportfolio-afl2026",
+  "version": "1.0.0",
+  "description": "Sportfolio AFL 2026 — Live Multiplayer Fantasy Sharemarket Game",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
