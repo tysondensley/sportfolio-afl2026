@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sportfolio — AFL 2026</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#080b12; --surface:#111620; --surface2:#181f2e;
+  --border:#1e2d45; --accent:#FFB400; --blue:#4da6ff;
+  --up:#00c97a; --down:#ff4f6d; --text:#dde4f0; --muted:#637089; --dim:#3a4560;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:'DM Sans',system-ui,sans-serif;min-height:100vh}
+body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 60% 40% at 50% 0%,rgba(255,180,0,.05),transparent);pointer-events:none;z-index:0}
+input:focus{outline:none;border-color:var(--accent)!important}
+button:disabled{opacity:.3;cursor:not-allowed!important}
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+@keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.page{display:none}.page.active{display:block;animation:fadeIn .25s ease}
+
+/* LOGIN */
+.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:2rem;position:relative;z-index:1}
+.login-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:2.5rem;width:100%;max-width:400px;text-align:center}
+.login-logo{font-family:'Bebas Neue',sans-serif;font-size:3.5rem;color:var(--accent);letter-spacing:.05em;line-height:1}
+.login-season{font-family:'Bebas Neue',sans-serif;font-size:1rem;color:var(--muted);letter-spacing:.15em;margin-bottom:.5rem}
+.login-sub{color:var(--muted);font-size:.85rem;margin-bottom:2rem;line-height:1.5}
+.player-btn{width:100%;padding:.9rem 1.1rem;margin-bottom:.6rem;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:.95rem;font-weight:600;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:.75rem;font-family:inherit}
+.player-btn:hover{border-color:var(--accent);color:var(--accent)}
+.player-btn .pval{margin-left:auto;font-family:'DM Mono',monospace;font-size:.78rem;color:var(--muted)}
+
+/* HEADER */
+header{position:sticky;top:0;z-index:100;background:rgba(8,11,18,.96);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 1.25rem;height:58px}
+.logo{font-family:'Bebas Neue',sans-serif;font-size:1.7rem;color:var(--accent);letter-spacing:.05em;line-height:1}
+.logo span{color:var(--text)}
+.logo small{font-family:'DM Sans',sans-serif;font-size:.6rem;color:var(--muted);letter-spacing:.12em;text-transform:uppercase;display:block;margin-top:-3px}
+nav{display:flex;gap:.2rem}
+nav button{background:none;border:none;color:var(--muted);font-family:inherit;font-size:.8rem;font-weight:500;padding:.42rem .85rem;border-radius:6px;cursor:pointer;transition:all .2s}
+nav button:hover{color:var(--text);background:var(--surface)}
+nav button.active{color:var(--accent);background:rgba(255,180,0,.08)}
+.hdr-right{display:flex;align-items:center;gap:.75rem}
+.round-badge{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.3rem .75rem;text-align:center;min-width:54px}
+.round-badge .rl{font-size:.55rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em}
+.round-badge .rv{font-family:'Bebas Neue',sans-serif;font-size:1.2rem;color:var(--accent);line-height:1.1}
+.sync-dot{width:6px;height:6px;border-radius:50%;background:var(--up);display:inline-block;animation:pulse 2s infinite;margin-right:.3rem}
+
+/* BUTTONS */
+.btn{background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:inherit;font-size:.78rem;font-weight:500;padding:.4rem .8rem;border-radius:6px;cursor:pointer;transition:all .2s}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#000;font-weight:700}
+.btn.primary:hover{background:#ffc933}
+.btn.sm{font-size:.72rem;padding:.32rem .65rem}
+.btn.danger{background:rgba(255,79,109,.08);border-color:rgba(255,79,109,.3);color:var(--down)}
+.buy-btn{background:rgba(255,180,0,.08);border:1px solid rgba(255,180,0,.25);color:var(--accent);font-family:inherit;font-size:.7rem;font-weight:700;padding:.25rem .6rem;border-radius:5px;cursor:pointer;transition:all .2s}
+.buy-btn:hover{background:rgba(255,180,0,.18);border-color:var(--accent)}
+.sell-btn{background:rgba(255,79,109,.07);border:1px solid rgba(255,79,109,.25);color:var(--down);font-family:inherit;font-size:.7rem;font-weight:700;padding:.25rem .6rem;border-radius:5px;cursor:pointer;transition:all .2s}
+.sell-btn:hover{background:rgba(255,79,109,.15)}
+
+/* LAYOUT */
+main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:1.1rem}
+.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:1.25rem}
+
+/* CARDS */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:1.1rem}
+.card-hd{padding:.8rem 1.1rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.card-title{font-family:'Bebas Neue',sans-serif;font-size:.95rem;letter-spacing:.08em}
+.card-body{padding:1.1rem}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1rem 1.1rem}
+.stat-label{font-size:.62rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-bottom:.3rem}
+.stat-val{font-family:'DM Mono',monospace;font-size:1.35rem}
+.stat-sub{font-size:.72rem;margin-top:.15rem}
+
+/* TABLE */
+.tbl{width:100%;border-collapse:collapse}
+.tbl th{font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);padding:.55rem .9rem;text-align:left;border-bottom:1px solid var(--border)}
+.tbl td{padding:.6rem .9rem;font-size:.82rem;border-bottom:1px solid rgba(30,45,69,.35)}
+.tbl tr:hover td{background:rgba(255,255,255,.015)}
+
+/* POSITION BADGES */
+.pos-badge{width:26px;height:26px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;font-family:'DM Mono',monospace;font-size:.7rem}
+.pos-top4{background:rgba(255,180,0,.1);color:var(--accent)}
+.pos-top8{background:rgba(77,166,255,.08);color:var(--blue)}
+.pos-mid{background:var(--surface2);color:var(--muted)}
+.pos-bot{background:rgba(255,79,109,.1);color:var(--down)}
+
+/* BANNERS */
+.banner{border-radius:8px;padding:.65rem 1rem;margin-bottom:1.1rem;font-size:.8rem;border:1px solid;display:flex;align-items:center;justify-content:space-between}
+.banner.open{background:rgba(0,201,122,.05);border-color:rgba(0,201,122,.2)}
+.banner.closed{background:rgba(255,79,109,.05);border-color:rgba(255,79,109,.2)}
+.dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:.5rem;vertical-align:middle}
+.dot.live{background:var(--up);animation:pulse 2s infinite}
+.dot.off{background:var(--down)}
+
+/* HOLDINGS */
+.holding{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.8rem 1rem;margin-bottom:.5rem;display:grid;grid-template-columns:1fr auto auto auto;align-items:center;gap:.75rem}
+.holding:hover{border-color:rgba(255,180,0,.2)}
+.hold-tag{font-size:.62rem;padding:.18rem .45rem;border-radius:4px;background:rgba(255,180,0,.1);color:var(--accent);border:1px solid rgba(255,180,0,.2);font-family:'DM Mono',monospace;white-space:nowrap}
+
+/* LEADERBOARD */
+.lb-row{display:grid;grid-template-columns:40px 1fr auto auto;align-items:center;gap:1rem;padding:.75rem 1.1rem;border-bottom:1px solid rgba(30,45,69,.35);cursor:pointer;transition:background .15s}
+.lb-row:last-child{border-bottom:none}
+.lb-row:hover{background:rgba(255,255,255,.02)}
+.lb-row.me{background:rgba(255,180,0,.04);border-left:2px solid var(--accent)}
+.rank-n{font-family:'Bebas Neue',sans-serif;font-size:1.4rem;text-align:center}
+
+/* PLAYER TABS */
+.player-tabs{display:flex;gap:.4rem;margin-bottom:1.1rem;flex-wrap:wrap}
+.player-tab{background:var(--surface2);border:1px solid var(--border);color:var(--muted);font-family:inherit;font-size:.78rem;font-weight:500;padding:.38rem .85rem;border-radius:999px;cursor:pointer;transition:all .2s}
+.player-tab:hover{color:var(--text)}
+.player-tab.active{background:rgba(255,180,0,.1);border-color:var(--accent);color:var(--accent)}
+.player-tab.ai{border-style:dashed}
+
+/* TRADE LOG */
+.tlog-item{display:flex;justify-content:space-between;align-items:center;padding:.45rem 0;border-bottom:1px solid rgba(30,45,69,.3);font-size:.78rem}
+.tlog-item:last-child{border-bottom:none}
+.tlog-type{font-family:'DM Mono',monospace;font-size:.65rem;padding:.14rem .38rem;border-radius:3px;margin-right:.4rem}
+.tlog-buy{background:rgba(0,201,122,.1);color:var(--up)}
+.tlog-sell{background:rgba(255,79,109,.1);color:var(--down)}
+
+/* MODAL */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.8);backdrop-filter:blur(5px);z-index:500;display:none;align-items:center;justify-content:center;padding:1rem}
+.overlay.open{display:flex}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:14px;width:100%;max-width:400px}
+.modal-hd{padding:1rem 1.25rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.modal-title{font-family:'Bebas Neue',sans-serif;font-size:1.1rem;letter-spacing:.05em}
+.modal-x{background:none;border:none;color:var(--muted);font-size:1.1rem;cursor:pointer;padding:.25rem}
+.modal-body{padding:1.25rem}
+.modal-info{background:var(--surface2);border-radius:8px;padding:.875rem;margin-bottom:1rem;display:flex;justify-content:space-between}
+.m-label{font-size:.65rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:.3rem}
+.m-val{font-family:'DM Mono',monospace;font-size:1.25rem;color:var(--accent)}
+.m-input-group{margin-bottom:1rem}
+.m-input-label{font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:.4rem}
+.m-input{width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:'DM Mono',monospace;font-size:.9rem;padding:.6rem .85rem;border-radius:7px;outline:none}
+.m-summary{background:var(--surface2);border-radius:8px;padding:.875rem;margin-bottom:.875rem;font-family:'DM Mono',monospace;font-size:.78rem}
+.m-row{display:flex;justify-content:space-between;margin-bottom:.4rem;color:var(--muted)}
+.m-row:last-child{margin-bottom:0;color:var(--text)}
+.m-row:last-child span:last-child{color:var(--accent)}
+.m-warn{background:rgba(255,79,109,.08);border:1px solid rgba(255,79,109,.2);border-radius:6px;padding:.65rem;font-size:.78rem;color:var(--down);margin-bottom:.875rem}
+.modal-footer{display:flex;gap:.6rem}
+.modal-footer .btn{flex:1;padding:.7rem;font-size:.85rem}
+
+/* TOAST */
+#toast{position:fixed;bottom:1.5rem;right:1.5rem;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.875rem 1.1rem;max-width:280px;z-index:1000;transform:translateY(80px);opacity:0;transition:all .3s}
+#toast.show{transform:translateY(0);opacity:1}
+#toast.success{border-color:rgba(0,201,122,.35)}
+#toast.error{border-color:rgba(255,79,109,.35)}
+.toast-title{font-weight:600;font-size:.82rem;margin-bottom:.2rem}
+.toast.success .toast-title,.toast-title.success{color:var(--up)}
+.toast-title.error{color:var(--down)}
+.toast-msg{font-size:.75rem;color:var(--muted)}
+
+/* ADMIN */
+.admin-row{display:flex;align-items:center;justify-content:space-between;padding:.42rem 0;border-bottom:1px solid rgba(30,45,69,.3);font-size:.8rem}
+.admin-row:last-child{border-bottom:none}
+.admin-input{width:38px;background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:'DM Mono',monospace;font-size:.78rem;padding:.28rem .4rem;border-radius:5px;text-align:center;outline:none}
+.admin-input.pct{width:56px}
+.admin-input:focus{border-color:var(--accent)}
+
+.empty-state{text-align:center;padding:1.75rem;color:var(--muted);font-size:.82rem}
+.empty-icon{font-size:1.6rem;margin-bottom:.5rem}
+.mono{font-family:'DM Mono',monospace}
+
+@media(max-width:640px){
+  .stats-row{grid-template-columns:1fr 1fr}
+  .two-col{grid-template-columns:1fr}
+  .holding{grid-template-columns:1fr auto}
+  .hide-mob{display:none}
+  nav button{font-size:.72rem;padding:.38rem .6rem}
+}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginScreen" class="login-wrap">
+  <div class="login-card">
+    <div class="login-logo">Sportfolio</div>
+    <div class="login-season">AFL 2026 · Rounds 1–10</div>
+    <div class="login-sub">Select your player to enter the game.<br>All trades and prices are live and shared.</div>
+    <div id="loginButtons"></div>
+    <div style="margin-top:1rem;font-size:.72rem;color:var(--muted)">Tyson is the admin · State syncs every 15 seconds</div>
+  </div>
+</div>
+
+<!-- GAME -->
+<div id="gameScreen" style="display:none">
+  <header>
+    <div>
+      <div class="logo">Sport<span>folio</span></div>
+      <small style="font-family:'DM Sans',sans-serif;font-size:.6rem;color:var(--muted);letter-spacing:.12em;text-transform:uppercase">AFL 2026 · Rounds 1–10</small>
+    </div>
+    <nav>
+      <button class="active" onclick="showTab('market',this)">📈 Market</button>
+      <button onclick="showTab('portfolio',this)">💼 Portfolio</button>
+      <button onclick="showTab('leaderboard',this)">🏆 Leaderboard</button>
+      <button id="adminNavBtn" onclick="showTab('admin',this)" style="display:none">⚙ Admin</button>
+    </nav>
+    <div class="hdr-right">
+      <div style="font-size:.72rem;color:var(--muted)"><span class="sync-dot" id="syncDot"></span><span id="syncLabel">Live</span></div>
+      <div class="round-badge">
+        <div class="rl">Round</div>
+        <div class="rv" id="roundDisplay">PRE</div>
+      </div>
+      <button class="btn sm" onclick="logout()">← Switch</button>
+      <button class="btn primary sm" id="advanceBtn" onclick="advanceRound()" style="display:none">Advance Round →</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- MARKET -->
+    <div class="page active" id="tab-market">
+      <div id="tradingBanner" class="banner open">
+        <div><span class="dot live"></span><strong>Trading Open</strong></div>
+      </div>
+      <div class="stats-row">
+        <div class="stat-card"><div class="stat-label">Your Portfolio</div><div class="stat-val" id="mPortfolio">$10,000</div><div class="stat-sub" id="mPortfolioChg">—</div></div>
+        <div class="stat-card"><div class="stat-label">Cash</div><div class="stat-val" style="color:var(--blue)" id="mCash">$10,000</div><div class="stat-sub" style="color:var(--muted)">Available</div></div>
+        <div class="stat-card"><div class="stat-label">Rank</div><div class="stat-val" id="mRank">#—</div><div class="stat-sub" style="color:var(--muted)">of 10 players</div></div>
+        <div class="stat-card"><div class="stat-label">Trades This Round</div><div class="stat-val" id="mTrades">0</div><div class="stat-sub" style="color:var(--muted)" id="mNextFee">Next fee: —</div></div>
+      </div>
+      <div class="card">
+        <div class="card-hd">
+          <div class="card-title">AFL 2026 Ladder & Share Prices</div>
+          <div style="font-size:.7rem;color:var(--muted)">⭐ Top 4 earn interest · ⚠ Last team taxed</div>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="tbl">
+            <thead><tr>
+              <th>Pos</th><th>Team</th>
+              <th class="hide-mob">W–L–D</th>
+              <th class="hide-mob">Pts</th>
+              <th class="hide-mob">%</th>
+              <th>Price</th>
+              <th>Change</th>
+              <th>You Hold</th>
+              <th></th>
+            </tr></thead>
+            <tbody id="ladderBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- PORTFOLIO -->
+    <div class="page" id="tab-portfolio">
+      <div class="player-tabs" id="playerTabs"></div>
+      <div id="portfolioContent"></div>
+    </div>
+
+    <!-- LEADERBOARD -->
+    <div class="page" id="tab-leaderboard">
+      <div class="two-col">
+        <div class="card">
+          <div class="card-hd"><div class="card-title">Rankings</div><div style="font-size:.72rem;color:var(--muted)" id="lbRoundLabel">Pre-Season</div></div>
+          <div id="lbList"></div>
+        </div>
+        <div>
+          <div class="card" style="margin-bottom:1rem">
+            <div class="card-hd"><div class="card-title">Top Movers</div></div>
+            <div class="card-body" id="topMovers"><div class="empty-state"><div class="empty-icon">📊</div>Advance to Round 1 to see movers.</div></div>
+          </div>
+          <div class="card">
+            <div class="card-hd"><div class="card-title">Round Summary</div></div>
+            <div class="card-body" id="roundSummary">
+              <div style="font-size:.82rem;color:var(--muted)">Advance to Round 1 to see results.</div>
+              <button class="btn sm" style="margin-top:.75rem;width:100%" onclick="refreshState()">🔄 Refresh</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ADMIN (Tyson only) -->
+    <div class="page" id="tab-admin">
+      <div class="two-col">
+        <div class="card">
+          <div class="card-hd">
+            <div class="card-title">Update Ladder — Round <span id="adminRoundNum">1</span></div>
+            <button class="btn primary sm" onclick="applyLadderUpdate()">Apply Update</button>
+          </div>
+          <div class="card-body">
+            <p style="font-size:.75rem;color:var(--muted);margin-bottom:.875rem">Enter W/L/D and percentage after each AFL round. Ladder auto-sorts by points then percentage.</p>
+            <div id="adminInputs"></div>
+          </div>
+        </div>
+        <div>
+          <div class="card" style="margin-bottom:1rem">
+            <div class="card-hd"><div class="card-title">Weekly Process</div></div>
+            <div class="card-body" style="font-size:.8rem;line-height:1.75;color:var(--muted)">
+              <p style="margin-bottom:.75rem"><strong style="color:var(--text)">Each week as admin (Tyson):</strong></p>
+              <ol style="margin-left:1.1rem;display:flex;flex-direction:column;gap:.35rem">
+                <li>AFL round finishes over the weekend</li>
+                <li>Enter updated W/L/D and % for each team above</li>
+                <li>Click <strong style="color:var(--accent)">Apply Update</strong> — everyone sees new prices instantly</li>
+                <li>Jas and Sam make their own trades directly at this URL</li>
+                <li>Click <strong style="color:var(--accent)">Advance Round →</strong> in the header when trading closes</li>
+              </ol>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-hd">
+              <div class="card-title">Current Standings</div>
+              <button class="btn sm danger" onclick="confirmReset()">⚠ Reset Game</button>
+            </div>
+            <div class="card-body" id="adminStandings"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- BUY MODAL -->
+<div class="overlay" id="buyOverlay">
+  <div class="modal">
+    <div class="modal-hd">
+      <div class="modal-title">Buy Shares — <span id="buyTeam"></span></div>
+      <button class="modal-x" onclick="closeBuyModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size:.72rem;color:var(--muted);margin-bottom:.875rem">Buying as: <strong id="buyingAs" style="color:var(--text)"></strong></div>
+      <div class="modal-info">
+        <div><div class="m-label">Share Price</div><div class="m-val" id="buyPriceDisplay">—</div></div>
+        <div style="text-align:right"><div class="m-label">Your Cash</div><div class="m-val" style="color:var(--blue)" id="buyCashDisplay">—</div></div>
+      </div>
+      <div class="m-input-group">
+        <div class="m-input-label">Amount to Invest ($)</div>
+        <input class="m-input" type="number" id="buyAmtInput" placeholder="e.g. 2000" oninput="updateBuySummary()" min="1">
+      </div>
+      <div class="m-summary">
+        <div class="m-row"><span>Shares you'll receive</span><span id="bShares">—</span></div>
+        <div class="m-row"><span>Brokerage fee</span><span id="bFee">—</span></div>
+        <div class="m-row"><span>Total cost</span><span id="bTotal">—</span></div>
+        <div class="m-row"><span>Remaining cash</span><span id="bRemain">—</span></div>
+      </div>
+      <div class="m-warn" id="buyWarnEl" style="display:none"></div>
+      <div class="modal-footer">
+        <button class="btn" onclick="closeBuyModal()">Cancel</button>
+        <button class="btn primary" id="buyConfirmBtn" onclick="submitBuy()">Confirm Buy</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SELL MODAL -->
+<div class="overlay" id="sellOverlay">
+  <div class="modal">
+    <div class="modal-hd">
+      <div class="modal-title">Sell Shares — <span id="sellTeam"></span></div>
+      <button class="modal-x" onclick="closeSellModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-info">
+        <div><div class="m-label">Current Price</div><div class="m-val" id="sellPriceDisplay">—</div></div>
+        <div style="text-align:right"><div class="m-label">Your Shares</div><div class="m-val" style="color:var(--blue)" id="sellSharesDisplay">—</div></div>
+      </div>
+      <div class="m-warn" id="sellHoldWarn" style="display:none"></div>
+      <div class="m-input-group">
+        <div class="m-input-label">Shares to Sell</div>
+        <input class="m-input" type="number" id="sellAmtInput" placeholder="Number of shares" oninput="updateSellSummary()">
+      </div>
+      <div class="m-summary">
+        <div class="m-row"><span>Sale value</span><span id="sValue">—</span></div>
+        <div class="m-row"><span>Brokerage fee</span><span id="sFee">—</span></div>
+        <div class="m-row"><span>Net proceeds</span><span id="sNet">—</span></div>
+      </div>
+      <div class="m-warn" id="sellWarnEl" style="display:none"></div>
+      <div class="modal-footer">
+        <button class="btn" onclick="closeSellModal()">Cancel</button>
+        <button class="btn" id="sellConfirmBtn" style="background:var(--down);border-color:var(--down);color:#fff;font-weight:700;flex:1;padding:.7rem;font-size:.85rem" onclick="submitSell()">Confirm Sell</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"><div class="toast-title" id="toastTitle"></div><div class="toast-msg" id="toastMsg"></div></div>
+
+<script>
+// ================================================================
+// CLIENT-SIDE GAME CLIENT
+// ================================================================
+
+const PRICE_SCALE = {1:6.12,2:5.56,3:5.05,4:4.59,5:4.18,6:3.80,7:3.45,8:3.14,9:2.85,10:2.59,11:2.36,12:2.14,13:1.95,14:1.77,15:1.61,16:1.46,17:1.33,18:1.00};
+const INTEREST_RATES = {1:0.02,2:0.015,3:0.01,4:0.005};
+const HUMAN_PLAYERS = ["Tyson","Jas","Sam"];
+const AI_PLAYERS = ["Alex","Jordan","Casey","Riley","Morgan","Quinn","Blake"];
+const ALL_PLAYERS = [...HUMAN_PLAYERS,...AI_PLAYERS];
+const PORTFOLIO_CAP = 0.25;
+
+let gameState = null;
+let currentPlayer = null;
+let viewingPlayer = null;
+let activeBuyTeam = null;
+let activeSellTeam = null;
+let syncInterval = null;
+let toastTimer = null;
+
+// ── FORMAT ───────────────────────────────────────────────────
+const fmt = n => "$"+Math.abs(n).toLocaleString("en-AU",{minimumFractionDigits:0,maximumFractionDigits:0});
+const fmtD = n => (n>=0?"+":"-")+fmt(Math.abs(n));
+const fmtP = n => (n>=0?"+":"")+n.toFixed(1)+"%";
+const fmtS = n => Math.round(n).toLocaleString();
+
+// ── STATE ────────────────────────────────────────────────────
+function getPrice(teamName, ladder) {
+  const pos = (ladder||gameState.ladder).findIndex(t=>t.name===teamName);
+  return PRICE_SCALE[pos+1]||PRICE_SCALE[18];
+}
+function getTotal(player, ladder) {
+  const ldr = ladder||gameState.ladder;
+  return player.cash + player.holdings.reduce((s,h)=>s+h.shares*getPrice(h.team,ldr),0);
+}
+function getBrokerageFee(player) {
+  return getTotal(player)*0.005*Math.pow(2,player.tradesThisRound);
+}
+function canSell(holding) {
+  const minHold = holding.buyRound===0?3:2;
+  return (gameState.round-holding.buyRound)>=minHold;
+}
+function roundsLeft(holding) {
+  const minHold = holding.buyRound===0?3:2;
+  return Math.max(0,minHold-(gameState.round-holding.buyRound));
+}
+function getRank(playerName) {
+  return [...ALL_PLAYERS].map(n=>({n,v:getTotal(gameState.players[n])})).sort((a,b)=>b.v-a.v).findIndex(p=>p.n===playerName)+1;
+}
+
+// ── API ───────────────────────────────────────────────────────
+async function api(path, method="GET", body=null) {
+  const opts = {method,headers:{"Content-Type":"application/json"}};
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(path,opts);
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error||"Request failed");
+  return data;
+}
+
+async function refreshState() {
+  try {
+    const data = await api("/api/state");
+    gameState = data;
+    renderAll();
+    document.getElementById("syncDot").style.background = "var(--up)";
+    document.getElementById("syncLabel").textContent = "Live";
+  } catch(e) {
+    document.getElementById("syncDot").style.background = "var(--down)";
+    document.getElementById("syncLabel").textContent = "Offline";
+  }
+}
+
+// ── LOGIN ─────────────────────────────────────────────────────
+async function initLogin() {
+  await refreshState();
+  const container = document.getElementById("loginButtons");
+  container.innerHTML = "";
+  HUMAN_PLAYERS.forEach(name => {
+    const p = gameState?.players[name];
+    const total = p ? getTotal(p) : 10000;
+    const btn = document.createElement("button");
+    btn.className = "player-btn";
+    btn.innerHTML = `<span style="font-size:1.2rem">👤</span><span>${name}</span><span class="pval">${fmt(total)}</span>`;
+    btn.onclick = () => login(name);
+    container.appendChild(btn);
+  });
+}
+
+function login(name) {
+  currentPlayer = name;
+  viewingPlayer = name;
+  document.getElementById("loginScreen").style.display = "none";
+  document.getElementById("gameScreen").style.display = "block";
+  if (name === "Tyson") {
+    document.getElementById("adminNavBtn").style.display = "";
+    document.getElementById("advanceBtn").style.display = "";
+  }
+  renderAll();
+  syncInterval = setInterval(refreshState, 15000);
+}
+
+function logout() {
+  currentPlayer = null;
+  viewingPlayer = null;
+  clearInterval(syncInterval);
+  document.getElementById("gameScreen").style.display = "none";
+  document.getElementById("loginScreen").style.display = "flex";
+  initLogin();
+}
+
+// ── RENDER ────────────────────────────────────────────────────
+function renderAll() {
+  if (!gameState||!currentPlayer) return;
+  updateHeaderUI();
+  renderLadder();
+  renderPortfolio();
+  renderLeaderboard();
+  if (currentPlayer==="Tyson") renderAdmin();
+}
+
+function updateHeaderUI() {
+  const gs = gameState;
+  document.getElementById("roundDisplay").textContent = gs.round===0?"PRE":gs.round;
+  document.getElementById("lbRoundLabel").textContent = gs.round===0?"Pre-Season":"After Round "+gs.round;
+  document.getElementById("adminRoundNum").textContent = gs.round+1;
+  const isOpen = gs.round < 10;
+  const banner = document.getElementById("tradingBanner");
+  if (!isOpen) {
+    banner.className="banner closed";
+    banner.innerHTML='<div><span class="dot off"></span><strong>Season Complete</strong> — Final results locked.</div>';
+  } else if (gs.round===0) {
+    banner.className="banner open";
+    banner.innerHTML='<div><span class="dot live"></span><strong>Pre-Season Trading Open</strong> — Initial investments now accepted. 3-round hold applies.</div><div style="font-family:\'DM Mono\',monospace;font-size:.75rem;color:var(--muted)">Brokerage: 0.5% of portfolio</div>';
+  } else {
+    banner.className="banner open";
+    banner.innerHTML=`<div><span class="dot live"></span><strong>Round ${gs.round} Complete — Trading Open</strong></div><div style="font-family:'DM Mono',monospace;font-size:.75rem;color:var(--muted)">Brokerage: 0.5% of portfolio · doubles each trade</div>`;
+  }
+  const myP = gs.players[currentPlayer];
+  const myTotal = getTotal(myP);
+  const myChg = myTotal-10000;
+  document.getElementById("mPortfolio").textContent = fmt(myTotal);
+  document.getElementById("mPortfolio").style.color = myChg>=0?"var(--up)":"var(--down)";
+  document.getElementById("mPortfolioChg").textContent = `${fmtD(myChg)} (${fmtP(myChg/10000*100)})`;
+  document.getElementById("mPortfolioChg").style.color = myChg>=0?"var(--up)":"var(--down)";
+  document.getElementById("mCash").textContent = fmt(myP.cash);
+  document.getElementById("mRank").textContent = "#"+getRank(currentPlayer);
+  document.getElementById("mTrades").textContent = myP.tradesThisRound;
+  document.getElementById("mNextFee").textContent = "Next fee: "+fmt(getBrokerageFee(myP));
+  if (currentPlayer==="Tyson") {
+    const advBtn = document.getElementById("advanceBtn");
+    advBtn.disabled = gs.round>=10;
+    advBtn.textContent = gs.round>=10?"✓ Season Complete":"Advance Round →";
+  }
+}
+
+function renderLadder() {
+  const gs = gameState;
+  const tbody = document.getElementById("ladderBody");
+  tbody.innerHTML = "";
+  const myP = gs.players[currentPlayer];
+  const isOpen = gs.round<10;
+
+  gs.ladder.forEach((team,idx) => {
+    const pos = idx+1;
+    const price = PRICE_SCALE[pos];
+    const prevPrice = gs.prevLadder ? getPrice(team.name,gs.prevLadder) : price;
+    const chg = price-prevPrice;
+    const myH = myP.holdings.find(h=>h.team===team.name);
+    let posClass = pos<=4?"pos-top4":pos<=8?"pos-top8":pos===18?"pos-bot":"pos-mid";
+    let chgHtml = "<span style='color:var(--muted)'>—</span>";
+    if (gs.prevLadder) {
+      const color = chg>0.01?"var(--up)":chg<-0.01?"var(--down)":"var(--muted)";
+      const bg = chg>0.01?"rgba(0,201,122,.1)":chg<-0.01?"rgba(255,79,109,.1)":"var(--surface2)";
+      chgHtml = `<span style="font-family:'DM Mono',monospace;font-size:.72rem;padding:.18rem .45rem;border-radius:4px;background:${bg};color:${color}">${chg>0.01?`▲$${chg.toFixed(2)}`:chg<-0.01?`▼$${Math.abs(chg).toFixed(2)}`:"—"}</span>`;
+    }
+    const interestNote = pos<=4?`<span style="font-size:.58rem;color:var(--up);margin-left:.4rem">+${INTEREST_RATES[pos]*100}%/wk</span>`:pos===18?`<span style="font-size:.58rem;color:var(--down);margin-left:.4rem">-1%/wk</span>`:"";
+    const holdingHtml = myH?`<span style="font-family:'DM Mono',monospace;font-size:.72rem;color:var(--accent)">${fmtS(myH.shares)}</span>`:`<span style="color:var(--dim);font-size:.72rem">—</span>`;
+
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><span class="pos-badge ${posClass}">${pos}</span></td>
+      <td><span style="margin-right:.4rem">${team.emoji}</span><strong>${team.name}</strong>${interestNote}</td>
+      <td class="hide-mob mono" style="color:var(--muted)">${gs.round>0?`${team.wins}–${team.losses}–${team.draws}`:"—"}</td>
+      <td class="hide-mob mono" style="color:var(--muted)">${gs.round>0?team.pts:"—"}</td>
+      <td class="hide-mob mono" style="color:var(--muted)">${gs.round>0?team.pct.toFixed(1)+"%":"—"}</td>
+      <td style="font-family:'DM Mono',monospace;font-weight:500;color:var(--accent)">$${price.toFixed(2)}</td>
+      <td>${chgHtml}</td>
+      <td>${holdingHtml}</td>
+      <td><button class="buy-btn" onclick="openBuyModal('${team.name}')" ${!isOpen?"disabled":""}>BUY</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function renderPortfolio() {
+  const gs = gameState;
+  // Player tabs
+  const tabs = document.getElementById("playerTabs");
+  tabs.innerHTML = "";
+  ALL_PLAYERS.forEach(name => {
+    const isH = HUMAN_PLAYERS.includes(name);
+    const btn = document.createElement("button");
+    btn.className = `player-tab ${isH?"":"ai"} ${name===viewingPlayer?"active":""}`;
+    btn.innerHTML = `${isH?"👤":"🤖"} ${name}`;
+    btn.onclick = ()=>{viewingPlayer=name;renderPortfolio();};
+    tabs.appendChild(btn);
+  });
+
+  const vP = gs.players[viewingPlayer];
+  const vTotal = getTotal(vP);
+  const vChg = vTotal-10000;
+  const canAct = viewingPlayer===currentPlayer && gs.round<10;
+  const isOpen = gs.round<10;
+
+  const content = document.getElementById("portfolioContent");
+  content.innerHTML = `
+    <div class="stats-row">
+      <div class="stat-card"><div class="stat-label">Total Portfolio</div><div class="stat-val" style="color:${vChg>=0?"var(--up)":"var(--down)"}">${fmt(vTotal)}</div><div class="stat-sub" style="color:${vChg>=0?"var(--up)":"var(--down)"}">${fmtD(vChg)} (${fmtP(vChg/10000*100)})</div></div>
+      <div class="stat-card"><div class="stat-label">Cash</div><div class="stat-val" style="color:var(--blue)">${fmt(vP.cash)}</div></div>
+      <div class="stat-card"><div class="stat-label">Trades This Round</div><div class="stat-val">${vP.tradesThisRound}</div><div class="stat-sub" style="color:var(--muted)">Next fee: ${fmt(getBrokerageFee(vP))}</div></div>
+      <div class="stat-card"><div class="stat-label">Rank</div><div class="stat-val">#${getRank(viewingPlayer)}</div></div>
+    </div>
+    <div class="two-col">
+      <div>
+        <div class="card">
+          <div class="card-hd"><div class="card-title">Holdings</div></div>
+          <div class="card-body">
+            ${vP.holdings.length===0?`<div class="empty-state"><div class="empty-icon">📊</div>No holdings yet.</div>`:
+              vP.holdings.map(h=>{
+                const price = getPrice(h.team);
+                const val = h.shares*price;
+                const pnl = val-(h.shares*h.buyPrice);
+                const pnlPct = pnl/(h.shares*h.buyPrice)*100;
+                const cs = canSell(h);
+                const rl = roundsLeft(h);
+                return `
+                  <div class="holding">
+                    <div>
+                      <div style="font-weight:600;font-size:.88rem">${h.team}</div>
+                      <div style="font-size:.68rem;color:var(--muted);font-family:'DM Mono',monospace;margin-top:.1rem">${fmtS(h.shares)} shares · bought $${h.buyPrice.toFixed(2)} · now $${price.toFixed(2)}</div>
+                    </div>
+                    <div>${!cs?`<span class="hold-tag">HOLD ${rl}R</span>`:""}</div>
+                    <div style="text-align:right;font-family:'DM Mono',monospace">
+                      <div style="font-size:.9rem">${fmt(val)}</div>
+                      <div style="font-size:.7rem;color:${pnl>=0?"var(--up)":"var(--down)"}">${fmtD(pnl)} (${fmtP(pnlPct)})</div>
+                    </div>
+                    ${canAct?`<button class="sell-btn" onclick="openSellModal('${h.team}')" ${!cs||!isOpen?"disabled":""}>${cs?"SELL":"HOLD"}</button>`:"<div></div>"}
+                  </div>`;
+              }).join("")}
+            <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.75rem 1rem;display:flex;justify-content:space-between;align-items:center;margin-top:.5rem">
+              <span style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em">Cash</span>
+              <span style="font-family:'DM Mono',monospace;color:var(--blue)">${fmt(vP.cash)}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><div class="card-title">Trade Log</div></div>
+        <div class="card-body">
+          ${vP.tradeLog.length===0?`<div class="empty-state"><div class="empty-icon">📋</div>No trades yet.</div>`:
+            [...vP.tradeLog].reverse().slice(0,20).map(t=>`
+              <div class="tlog-item">
+                <div><span class="tlog-type ${t.type==="buy"?"tlog-buy":"tlog-sell"}">${t.type.toUpperCase()}</span>${t.team}</div>
+                <div style="text-align:right;font-family:'DM Mono',monospace">
+                  <div>${fmt(t.value)}</div>
+                  <div style="font-size:.68rem;color:var(--muted)">R${t.round} · Fee ${fmt(t.fee)}</div>
+                </div>
+              </div>`).join("")}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderLeaderboard() {
+  const gs = gameState;
+  const ranked = ALL_PLAYERS.map(n=>({name:n,val:getTotal(gs.players[n]),isH:HUMAN_PLAYERS.includes(n)})).sort((a,b)=>b.val-a.val);
+  const list = document.getElementById("lbList");
+  list.innerHTML = "";
+  ranked.forEach((p,i)=>{
+    const rank = i+1;
+    const chg = p.val-10000;
+    const rankColor = rank===1?"var(--accent)":rank===2?"#b0bec5":rank===3?"#cd8c4a":"var(--dim)";
+    const isMe = p.name===currentPlayer;
+    const div = document.createElement("div");
+    div.className = `lb-row ${isMe?"me":""}`;
+    div.innerHTML = `
+      <div class="rank-n" style="color:${rankColor}">${rank}</div>
+      <div>
+        <span style="font-weight:600;font-size:.88rem">${p.name}</span>
+        ${isMe?`<span style="font-size:.58rem;color:var(--accent);background:rgba(255,180,0,.1);padding:.1rem .35rem;border-radius:3px;margin-left:.4rem;font-family:'DM Mono',monospace">YOU</span>`:""}
+        ${!p.isH?`<span style="font-size:.58rem;color:var(--muted);background:var(--surface2);padding:.1rem .35rem;border-radius:3px;margin-left:.4rem;font-family:'DM Mono',monospace">AI</span>`:""}
+      </div>
+      <div style="font-family:'DM Mono',monospace;font-size:.88rem;text-align:right">${fmt(p.val)}</div>
+      <div style="font-family:'DM Mono',monospace;font-size:.78rem;color:${chg>=0?"var(--up)":"var(--down)"};text-align:right">${fmtP(chg/10000*100)}</div>
+    `;
+    div.onclick = ()=>{viewingPlayer=p.name;showTab("portfolio",document.querySelectorAll("nav button")[1]);};
+    list.appendChild(div);
+  });
+
+  // Top movers
+  const movEl = document.getElementById("topMovers");
+  if (!gs.prevLadder) { movEl.innerHTML=`<div class="empty-state"><div class="empty-icon">📊</div>Advance to Round 1.</div>`; }
+  else {
+    const movers = gs.ladder.map((t,i)=>({name:t.name,emoji:t.emoji,chg:(gs.prevLadder.findIndex(p=>p.name===t.name))-i,pos:i+1})).sort((a,b)=>Math.abs(b.chg)-Math.abs(a.chg)).slice(0,6);
+    movEl.innerHTML = movers.map(m=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:.4rem 0;border-bottom:1px solid rgba(30,45,69,.3);font-size:.82rem">
+        <div>${m.emoji} ${m.name}</div>
+        <div style="display:flex;gap:.75rem;align-items:center">
+          <span style="font-family:'DM Mono',monospace;font-size:.75rem;color:${m.chg>0?"var(--up)":m.chg<0?"var(--down)":"var(--muted)"}">${m.chg>0?"▲":"▼"} ${Math.abs(m.chg)} places</span>
+          <span style="font-family:'DM Mono',monospace;color:var(--accent);font-size:.75rem">$${PRICE_SCALE[m.pos].toFixed(2)}</span>
+        </div>
+      </div>`).join("");
+  }
+
+  // Round summary
+  const sumEl = document.getElementById("roundSummary");
+  const leader = ranked[0], last = ranked[ranked.length-1];
+  sumEl.innerHTML = `
+    <div style="font-size:.82rem;line-height:1.8">
+      <div><strong style="color:var(--accent)">🥇 Leader:</strong> ${leader.name} — ${fmt(leader.val)}</div>
+      <div><strong style="color:var(--muted)">Last:</strong> ${last.name} — ${fmt(last.val)}</div>
+      <div style="margin-top:.4rem;color:var(--muted)">Gap: ${fmt(leader.val-last.val)}</div>
+      <div style="margin-top:.4rem;font-size:.72rem;color:var(--muted)">Last synced: ${new Date(gs.lastUpdated).toLocaleTimeString()}</div>
+    </div>
+    <button class="btn sm" style="margin-top:.75rem;width:100%" onclick="refreshState()">🔄 Refresh</button>`;
+}
+
+function renderAdmin() {
+  const gs = gameState;
+  const inputs = document.getElementById("adminInputs");
+  inputs.innerHTML = "";
+  gs.ladder.forEach(team=>{
+    const div = document.createElement("div");
+    div.className = "admin-row";
+    div.innerHTML = `
+      <div style="min-width:130px">${team.emoji} <strong>${team.name}</strong></div>
+      <div style="display:flex;align-items:center;gap:.35rem;flex-wrap:wrap">
+        <span style="font-size:.65rem;color:var(--muted)">W</span><input class="admin-input" id="w_${team.name.replace(/ /g,'_')}" type="number" min="0" value="${team.wins}">
+        <span style="font-size:.65rem;color:var(--muted)">L</span><input class="admin-input" id="l_${team.name.replace(/ /g,'_')}" type="number" min="0" value="${team.losses}">
+        <span style="font-size:.65rem;color:var(--muted)">D</span><input class="admin-input" id="d_${team.name.replace(/ /g,'_')}" type="number" min="0" value="${team.draws}">
+        <span style="font-size:.65rem;color:var(--muted)">%</span><input class="admin-input pct" id="p_${team.name.replace(/ /g,'_')}" type="number" min="0" step="0.1" value="${team.pct.toFixed(1)}">
+      </div>
+    `;
+    inputs.appendChild(div);
+  });
+
+  const standings = document.getElementById("adminStandings");
+  const ranked = ALL_PLAYERS.map(n=>({name:n,val:getTotal(gs.players[n])})).sort((a,b)=>b.val-a.val);
+  standings.innerHTML = ranked.map((p,i)=>`
+    <div style="display:flex;justify-content:space-between;font-size:.8rem;margin-bottom:.4rem">
+      <span style="color:var(--muted)">${i+1}. ${p.name}</span>
+      <span class="mono">${fmt(p.val)}</span>
+    </div>`).join("");
+}
+
+// ── ADMIN ACTIONS ────────────────────────────────────────────
+async function applyLadderUpdate() {
+  const updates = gameState.ladder.map(team => {
+    const k = team.name.replace(/ /g,"_");
+    return {
+      name: team.name,
+      wins: document.getElementById(`w_${k}`)?.value||team.wins,
+      losses: document.getElementById(`l_${k}`)?.value||team.losses,
+      draws: document.getElementById(`d_${k}`)?.value||team.draws,
+      pct: document.getElementById(`p_${k}`)?.value||team.pct
+    };
+  });
+  try {
+    const data = await api("/api/admin/ladder","POST",{playerName:"Tyson",updates});
+    gameState = data.state;
+    renderAll();
+    showToast("success","Ladder updated","Prices recalculated for all players");
+  } catch(e) { showToast("error","Update failed",e.message); }
+}
+
+async function advanceRound() {
+  try {
+    const data = await api("/api/admin/advance","POST",{playerName:"Tyson"});
+    gameState = data.state;
+    renderAll();
+    showToast("success",`Round ${gameState.round} locked in`,"Trading window now open");
+  } catch(e) { showToast("error","Failed to advance",e.message); }
+}
+
+function confirmReset() {
+  if (confirm("⚠ Reset the entire game back to the start? This cannot be undone.")) {
+    api("/api/admin/reset","POST",{playerName:"Tyson",confirm:"RESET"})
+      .then(data=>{gameState=data.state;renderAll();showToast("success","Game reset","Starting fresh");})
+      .catch(e=>showToast("error","Reset failed",e.message));
+  }
+}
+
+// ── BUY MODAL ────────────────────────────────────────────────
+function openBuyModal(teamName) {
+  activeBuyTeam = teamName;
+  const myP = gameState.players[currentPlayer];
+  const price = getPrice(teamName);
+  document.getElementById("buyTeam").textContent = teamName;
+  document.getElementById("buyingAs").textContent = currentPlayer;
+  document.getElementById("buyPriceDisplay").textContent = `$${price.toFixed(2)}`;
+  document.getElementById("buyCashDisplay").textContent = fmt(myP.cash);
+  document.getElementById("buyAmtInput").value = "";
+  document.getElementById("buyWarnEl").style.display = "none";
+  document.getElementById("buyConfirmBtn").disabled = false;
+  updateBuySummary();
+  document.getElementById("buyOverlay").classList.add("open");
+  setTimeout(()=>document.getElementById("buyAmtInput").focus(),100);
+}
+
+function updateBuySummary() {
+  const amt = parseFloat(document.getElementById("buyAmtInput").value)||0;
+  const myP = gameState.players[currentPlayer];
+  const price = getPrice(activeBuyTeam);
+  const fee = getBrokerageFee(myP);
+  const shares = amt>0?Math.floor(amt/price):0;
+  const total = amt+fee;
+  const remaining = myP.cash-total;
+  const maxInvest = getTotal(myP)*PORTFOLIO_CAP;
+  const existing = myP.holdings.find(h=>h.team===activeBuyTeam);
+  const existingVal = existing?existing.shares*price:0;
+
+  document.getElementById("bShares").textContent = shares>0?shares.toLocaleString():"—";
+  document.getElementById("bFee").textContent = fmt(fee);
+  document.getElementById("bTotal").textContent = amt>0?fmt(total):"—";
+  document.getElementById("bRemain").textContent = amt>0?fmt(remaining):"—";
+
+  const warn = document.getElementById("buyWarnEl");
+  warn.style.display="none";
+  document.getElementById("buyConfirmBtn").disabled = amt<=0;
+
+  if (amt>0) {
+    if (total>myP.cash){warn.style.display="block";warn.textContent=`Need ${fmt(total)}, have ${fmt(myP.cash)}`;document.getElementById("buyConfirmBtn").disabled=true;}
+    else if (existingVal+amt>maxInvest){warn.style.display="block";warn.textContent=`25% cap: max ${fmt(maxInvest-existingVal)} more in this team`;document.getElementById("buyConfirmBtn").disabled=true;}
+  }
+}
+
+async function submitBuy() {
+  const amount = parseFloat(document.getElementById("buyAmtInput").value);
+  if (!amount||amount<=0) return;
+  document.getElementById("buyConfirmBtn").disabled = true;
+  try {
+    const data = await api("/api/buy","POST",{playerName:currentPlayer,teamName:activeBuyTeam,amount});
+    gameState = data.state;
+    closeBuyModal();
+    renderAll();
+    showToast("success","Buy confirmed",`${data.shares.toLocaleString()} shares in ${activeBuyTeam} for ${fmt(data.cost)}`);
+  } catch(e) {
+    showToast("error","Trade failed",e.message);
+    document.getElementById("buyConfirmBtn").disabled=false;
+  }
+}
+
+function closeBuyModal() { document.getElementById("buyOverlay").classList.remove("open"); }
+
+// ── SELL MODAL ───────────────────────────────────────────────
+function openSellModal(teamName) {
+  activeSellTeam = teamName;
+  const myP = gameState.players[currentPlayer];
+  const h = myP.holdings.find(hh=>hh.team===teamName);
+  const price = getPrice(teamName);
+  document.getElementById("sellTeam").textContent = teamName;
+  document.getElementById("sellPriceDisplay").textContent = `$${price.toFixed(2)}`;
+  document.getElementById("sellSharesDisplay").textContent = h?fmtS(h.shares):"0";
+  document.getElementById("sellAmtInput").value = h?Math.round(h.shares):"";
+  document.getElementById("sellHoldWarn").style.display="none";
+  document.getElementById("sellWarnEl").style.display="none";
+  document.getElementById("sellConfirmBtn").disabled=false;
+  if (h&&!canSell(h)){
+    document.getElementById("sellHoldWarn").style.display="block";
+    document.getElementById("sellHoldWarn").textContent=`Hold period not met — ${roundsLeft(h)} more round(s) required.`;
+    document.getElementById("sellConfirmBtn").disabled=true;
+  }
+  updateSellSummary();
+  document.getElementById("sellOverlay").classList.add("open");
+}
+
+function updateSellSummary() {
+  const myP = gameState.players[currentPlayer];
+  const h = myP.holdings.find(hh=>hh.team===activeSellTeam);
+  if (!h) return;
+  const shares = parseFloat(document.getElementById("sellAmtInput").value)||0;
+  const price = getPrice(activeSellTeam);
+  const fee = getBrokerageFee(myP);
+  document.getElementById("sValue").textContent = shares>0?fmt(shares*price):"—";
+  document.getElementById("sFee").textContent = fmt(fee);
+  document.getElementById("sNet").textContent = shares>0?fmt(shares*price-fee):"—";
+}
+
+async function submitSell() {
+  const shares = parseFloat(document.getElementById("sellAmtInput").value);
+  if (!shares||shares<=0) return;
+  document.getElementById("sellConfirmBtn").disabled=true;
+  try {
+    const data = await api("/api/sell","POST",{playerName:currentPlayer,teamName:activeSellTeam,shares});
+    gameState = data.state;
+    closeSellModal();
+    renderAll();
+    showToast("success","Sell confirmed",`Net proceeds: ${fmt(data.net)}`);
+  } catch(e) {
+    showToast("error","Trade failed",e.message);
+    document.getElementById("sellConfirmBtn").disabled=false;
+  }
+}
+
+function closeSellModal() { document.getElementById("sellOverlay").classList.remove("open"); }
+
+// ── MODAL CLICK-OUTSIDE ──────────────────────────────────────
+document.querySelectorAll(".overlay").forEach(o=>o.addEventListener("click",e=>{if(e.target===o){o.classList.remove("open");}}));
+
+// ── NAV ──────────────────────────────────────────────────────
+function showTab(name, btn) {
+  document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
+  document.querySelectorAll("nav button").forEach(b=>b.classList.remove("active"));
+  document.getElementById("tab-"+name).classList.add("active");
+  if (btn) btn.classList.add("active");
+  else document.querySelectorAll("nav button")[["market","portfolio","leaderboard","admin"].indexOf(name)]?.classList.add("active");
+}
+
+// ── TOAST ────────────────────────────────────────────────────
+function showToast(type, title, msg) {
+  const el = document.getElementById("toast");
+  document.getElementById("toastTitle").textContent = title;
+  document.getElementById("toastTitle").className = "toast-title "+type;
+  document.getElementById("toastMsg").textContent = msg;
+  el.className = "show "+type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>el.className="",3500);
+}
+
+// ── INIT ─────────────────────────────────────────────────────
+initLogin();
+</script>
+</body>
+</html>
