@@ -197,6 +197,7 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
       <button class="active" onclick="showTab('market',this)">📈 Market</button>
       <button onclick="showTab('portfolio',this)">💼 Portfolio</button>
       <button onclick="showTab('leaderboard',this)">🏆 Leaderboard</button>
+      <button onclick="showTab('rules',this)">📋 Rules</button>
       <button id="adminNavBtn" onclick="showTab('admin',this)" style="display:none">⚙ Admin</button>
     </nav>
     <div class="hdr-right">
@@ -269,6 +270,63 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
               <div style="font-size:.82rem;color:var(--muted)">Advance to Round 1 to see results.</div>
               <button class="btn sm" style="margin-top:.75rem;width:100%" onclick="refreshState()">🔄 Refresh</button>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RULES -->
+    <div class="page" id="tab-rules">
+      <div class="card" style="max-width:760px;margin:0 auto">
+        <div class="card-hd">
+          <div class="card-title">Season Rules — AFL 2026</div>
+          <div style="font-size:.72rem;color:var(--muted)">Reference these by number when discussing changes</div>
+        </div>
+        <div class="card-body">
+          <div style="font-size:.82rem;line-height:1.9;color:var(--muted)">
+
+            <div style="margin-bottom:1.25rem">
+              <div style="font-family:'Bebas Neue',sans-serif;font-size:.8rem;letter-spacing:.1em;color:var(--accent);margin-bottom:.5rem">GETTING STARTED</div>
+              <div style="margin-bottom:.5rem"><span style="font-family:'DM Mono',monospace;color:var(--text);font-size:.78rem;margin-right:.6rem">1.</span>Each player starts with <strong style="color:var(--text)">$10,000</strong> to invest.</div>
+              <div style="margin-bottom:.5rem"><span style="font-family:'DM Mono',monospace;color:var(--text);font-size:.78rem;margin-right:.6rem">2.</span>Share prices are based on each team's ladder position — 1st costs <strong style="color:var(--text)">$6.12</strong>, 18th costs <strong style="color:var(--text)">$1.00</strong>. <em style="font-size:.78rem">(Before Opening Round, positions and prices are based on 2026 AFL premiership odds.)</em></div>
+              <div style="margin-bottom:.5rem"><span style="font-family:'DM Mono',monospace;color:var(--text);font-size:.78rem;margin-right:.6rem">3.</span>Prices update each week when the admin (Tyson) enters the new AFL ladder results.</div>
+            </div>
+
+            <div style="margin-bottom:1.25rem">
+              <div style="font-family:'Bebas Neue',sans-serif;font-size:.8rem;letter-spacing:.1em;color:var(--accent);margin-bottom:.5rem">THE SEASON</div>
+              <div style="margin-bottom:.5rem"><span style="font-family:'DM Mono',monospace;color:var(--text);font-size:.78rem;margin-right:.6rem">4.</span>The season runs for <strong style="color:var(--text)">10 rounds</strong>, mirroring the real AFL season: Opening Round, then Round 1 through Round 9.</div>
+            </div>
+
+            <div style="margin-bottom:1.25rem">
+              <div style="font-family:'Bebas Neue',sans-serif;font-size:.8rem;letter-spacing:.1em;color:var(--accent);margin-bottom:.5rem">PORTFOLIO LIMITS</div>
+              <div style="margin-bottom:.5rem"><span style="font-family:'DM Mono',monospace;color:var(--text);font-size:.78rem;margin-right:.6rem">5.</span>You may not invest more than <strong style="color:var(--text)">25%</strong> of your total portfolio value in any single team.</div>
+              <div style="margin-bottom:.5rem"><span style="font-family:'DM Mono',monospace;color:var(--text);font-size:.78rem;margin-right:.6rem">6.</span>You may not hold more than <strong style="color:var(--text)">50%</strong> of your portfolio value in cash.</div>
+            </div>
+
+            <div style="margin-bottom:1.25rem">
+              <div style="font-family:'Bebas Neue',sans-serif;font-size:.8rem;letter-spacing:.1em;color:var(--accent);margin-bottom:.5rem">HOLD PERIODS</div>
+              <div style="margin-bottom:.5rem"><span style="font-family:'DM Mono',monospace;color:var(--text);font-size:.78rem;margin-right:.6rem">7.</span>Shares purchased during the <strong style="color:var(--text)">pre-season</strong> must be held for a minimum of <strong style="color:var(--text)">3 rounds</strong> before selling.</div>
+              <div style="margin-bottom:.5rem"><span style="font-family:'DM Mono',monospace;color:var(--text);font-size:.78rem;margin-right:.6rem">8.</span>Shares purchased <strong style="color:var(--text)">during the season</strong> must be held for a minimum of <strong style="color:var(--text)">2 rounds</strong> before selling.</div>
+            </div>
+
+            <div style="margin-bottom:1.25rem">
+              <div style="font-family:'Bebas Neue',sans-serif;font-size:.8rem;letter-spacing:.1em;color:var(--accent);margin-bottom:.5rem">BROKERAGE</div>
+              <div style="margin-bottom:.5rem"><span style="font-family:'DM Mono',monospace;color:var(--text);font-size:.78rem;margin-right:.6rem">9.</span>Each trade incurs a brokerage fee of <strong style="color:var(--text)">0.5%</strong> of your total portfolio value.</div>
+              <div style="margin-bottom:.5rem"><span style="font-family:'DM Mono',monospace;color:var(--text);font-size:.78rem;margin-right:.6rem">10.</span>Each additional trade in the same round <strong style="color:var(--text)">doubles</strong> the brokerage fee — 1st trade: 0.5%, 2nd: 1.0%, 3rd: 2.0%, and so on.</div>
+            </div>
+
+            <div style="margin-bottom:1.25rem">
+              <div style="font-family:'Bebas Neue',sans-serif;font-size:.8rem;letter-spacing:.1em;color:var(--accent);margin-bottom:.5rem">INTEREST & TAX</div>
+              <div style="margin-bottom:.5rem"><span style="font-family:'DM Mono',monospace;color:var(--text);font-size:.78rem;margin-right:.6rem">11.</span>Teams finishing in the <strong style="color:var(--text)">top 4</strong> pay weekly interest on your shareholding: 1st: <strong style="color:var(--up)">2%</strong>, 2nd: <strong style="color:var(--up)">1.5%</strong>, 3rd: <strong style="color:var(--up)">1%</strong>, 4th: <strong style="color:var(--up)">0.5%</strong>.</div>
+              <div style="margin-bottom:.5rem"><span style="font-family:'DM Mono',monospace;color:var(--text);font-size:.78rem;margin-right:.6rem">12.</span>Interest only applies if the team has been in the top 4 <strong style="color:var(--text)">consecutively</strong> — no interest is paid in the first round a team enters the top 4.</div>
+              <div style="margin-bottom:.5rem"><span style="font-family:'DM Mono',monospace;color:var(--text);font-size:.78rem;margin-right:.6rem">13.</span>The team finishing <strong style="color:var(--text)">last (18th)</strong> incurs a weekly tax of <strong style="color:var(--down)">1%</strong> on your shareholding.</div>
+            </div>
+
+            <div>
+              <div style="font-family:'Bebas Neue',sans-serif;font-size:.8rem;letter-spacing:.1em;color:var(--accent);margin-bottom:.5rem">PLAYERS</div>
+              <div style="margin-bottom:.5rem"><span style="font-family:'DM Mono',monospace;color:var(--text);font-size:.78rem;margin-right:.6rem">14.</span>There are <strong style="color:var(--text)">3 human players</strong> (Tyson, Jas, Sam) and <strong style="color:var(--text)">7 AI opponents</strong>.</div>
+            </div>
+
           </div>
         </div>
       </div>
@@ -502,11 +560,16 @@ function renderAll() {
   if (currentPlayer==="Tyson") renderAdmin();
 }
 
+function getRoundLabel(r) { return r===0?"PRE":r===1?"OR":"R"+(r-1); }
+function getRoundFullLabel(r) { return r===0?"Pre-Season":r===1?"After Opening Round":"After Round "+(r-1); }
+function getRoundName(r) { return r===1?"Opening Round":"Round "+(r-1); }
+function getNextRoundName(r) { return r===1?"Opening Round":"Round "+(r-1); }
+
 function updateHeaderUI() {
   const gs = gameState;
-  document.getElementById("roundDisplay").textContent = gs.round===0?"PRE":gs.round;
-  document.getElementById("lbRoundLabel").textContent = gs.round===0?"Pre-Season":"After Round "+gs.round;
-  document.getElementById("adminRoundNum").textContent = gs.round+1;
+  document.getElementById("roundDisplay").textContent = getRoundLabel(gs.round);
+  document.getElementById("lbRoundLabel").textContent = getRoundFullLabel(gs.round);
+  document.getElementById("adminRoundNum").textContent = getNextRoundName(gs.round+1);
   const isOpen = gs.round < 10;
   const banner = document.getElementById("tradingBanner");
   if (!isOpen) {
@@ -517,7 +580,7 @@ function updateHeaderUI() {
     banner.innerHTML='<div><span class="dot live"></span><strong>Pre-Season Trading Open</strong> — Initial investments now accepted. 3-round hold applies.</div><div style="font-family:\'DM Mono\',monospace;font-size:.75rem;color:var(--muted)">Brokerage: 0.5% of portfolio</div>';
   } else {
     banner.className="banner open";
-    banner.innerHTML=`<div><span class="dot live"></span><strong>Round ${gs.round} Complete — Trading Open</strong></div><div style="font-family:'DM Mono',monospace;font-size:.75rem;color:var(--muted)">Brokerage: 0.5% of portfolio · doubles each trade</div>`;
+    banner.innerHTML=`<div><span class="dot live"></span><strong>${getRoundName(gs.round)} Complete — Trading Open</strong></div><div style="font-family:'DM Mono',monospace;font-size:.75rem;color:var(--muted)">Brokerage: 0.5% of portfolio · doubles each trade</div>`;
   }
   const myP = gs.players[currentPlayer];
   const myTotal = getTotal(myP);
@@ -647,7 +710,7 @@ function renderPortfolio() {
                 <div><span class="tlog-type ${t.type==="buy"?"tlog-buy":"tlog-sell"}">${t.type.toUpperCase()}</span>${t.team}</div>
                 <div style="text-align:right;font-family:'DM Mono',monospace">
                   <div>${fmt(t.value)}</div>
-                  <div style="font-size:.68rem;color:var(--muted)">R${t.round} · Fee ${fmt(t.fee)}</div>
+                  <div style="font-size:.68rem;color:var(--muted)">${getRoundLabel(t.round)} · Fee ${fmt(t.fee)}</div>
                 </div>
               </div>`).join("")}
         </div>
