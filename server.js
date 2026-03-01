@@ -309,6 +309,16 @@ app.post("/api/admin/advance", (req, res) => {
   res.json({ success: true, state: gs });
 });
 
+// Admin: save fixtures
+app.post("/api/admin/fixtures", (req, res) => {
+  const { playerName, fixtures } = req.body;
+  if (playerName !== "Tyson") return res.status(403).json({ error: "Admin only" });
+  const gs = loadState();
+  gs.fixtures = fixtures;
+  saveState(gs);
+  res.json({ success: true, state: gs });
+});
+
 // Reset (admin only - emergency use)
 app.post("/api/admin/reset", (req, res) => {
   const { playerName, confirm } = req.body;
