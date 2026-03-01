@@ -330,6 +330,8 @@ app.post("/api/buy", (req, res) => {
   if (existingVal + cost > maxInvest)
     return res.status(400).json({ error: `25% cap exceeded. Max ${Math.floor(maxInvest - existingVal)} more in this team.` });
 
+  const tradeId = Date.now() + "_" + Math.random().toString(36).slice(2,7);
+  const wasNewHolding = !existing;
   player.cash -= (cost + fee);
   player.tradesThisRound++;
   if (existing) {
@@ -339,7 +341,7 @@ app.post("/api/buy", (req, res) => {
   } else {
     player.holdings.push({ team: teamName, shares, buyPrice: price, buyRound: gs.round });
   }
-  player.tradeLog.push({ type:"buy", team:teamName, value:cost, fee, round:gs.round });
+  player.tradeLog.push({ id:tradeId, type:"buy", team:teamName, value:cost, fee, round:gs.round, shares, price, wasNewHolding });
 
   saveState(gs);
   res.json({ success: true, shares, cost, fee, state: gs });
@@ -358,10 +360,13 @@ app.post("/api/sell", (req, res) => {
   if (!canSellHolding(h, gs.round))
     return res.status(400).json({ error: `Hold period not met. ${(h.buyRound === 0 ? PRESEASON_HOLD : MIN_HOLD) - (gs.round - h.buyRound)} more round(s) required.` });
 
+  const tradeId = Date.now() + "_" + Math.random().toString(36).slice(2,7);
   const sellShares = Math.min(parseFloat(shares), h.shares);
   const price = getPrice(teamName, gs.ladder);
   const fee = getBrokerageFee(player, gs.ladder);
   const net = sellShares * price - fee;
+  const prevBuyPrice = h.buyPrice;
+  const prevBuyRound = h.buyRound;
 
   player.cash += net;
   player.tradesThisRound++;
@@ -370,10 +375,53 @@ app.post("/api/sell", (req, res) => {
   } else {
     h.shares -= sellShares;
   }
-  player.tradeLog.push({ type:"sell", team:teamName, value:sellShares*price, fee, round:gs.round });
+  player.tradeLog.push({ id:tradeId, type:"sell", team:teamName, value:sellShares*price, fee, round:gs.round, shares:sellShares, price, prevBuyPrice, prevBuyRound });
 
   saveState(gs);
   res.json({ success: true, net, fee, state: gs });
+});
+
+// Undo a trade (current round only)
+app.post("/api/undo", (req, res) => {
+  const { playerName, tradeId } = req.body;
+  if (!HUMAN_PLAYERS.includes(playerName)) return res.status(403).json({ error: "Not a human player" });
+  const gs = loadState();
+  const player = gs.players[playerName];
+
+  const tradeIdx = player.tradeLog.findIndex(t => t.id === tradeId);
+  if (tradeIdx === -1) return res.status(400).json({ error: "Trade not found" });
+  const trade = player.tradeLog[tradeIdx];
+  if (trade.round !== gs.round) return res.status(400).json({ error: "Can only undo trades from the current round" });
+
+  if (trade.type === "buy") {
+    // Reverse a buy: remove shares, refund cash + fee
+    const h = player.holdings.find(hh => hh.team === trade.team);
+    if (!h) return res.status(400).json({ error: "Holding not found" });
+    if (trade.wasNewHolding) {
+      player.holdings = player.holdings.filter(hh => hh.team !== trade.team);
+    } else {
+      h.shares -= trade.shares;
+      if (h.shares <= 0) player.holdings = player.holdings.filter(hh => hh.team !== trade.team);
+    }
+    player.cash += (trade.value + trade.fee);
+  } else if (trade.type === "sell") {
+    // Reverse a sell: return shares, deduct cash + fee
+    player.cash -= (trade.value + trade.fee);
+    const h = player.holdings.find(hh => hh.team === trade.team);
+    if (h) {
+      const tot = h.shares + trade.shares;
+      h.buyPrice = (h.shares * h.buyPrice + trade.shares * trade.prevBuyPrice) / tot;
+      h.shares = tot;
+    } else {
+      player.holdings.push({ team: trade.team, shares: trade.shares, buyPrice: trade.prevBuyPrice, buyRound: trade.prevBuyRound });
+    }
+  }
+
+  player.tradesThisRound = Math.max(0, player.tradesThisRound - 1);
+  player.tradeLog.splice(tradeIdx, 1);
+
+  saveState(gs);
+  res.json({ success: true, state: gs });
 });
 
 // Admin: update ladder
