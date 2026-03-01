@@ -329,10 +329,10 @@ app.post("/api/admin/reset", (req, res) => {
 });
 
 // Serve frontend for all other routes
-app.get("*", (req, res) => {
+app.use(function(req, res) {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-app.listen(PORT, () => {
-  console.log(`Sportfolio AFL 2026 running on port ${PORT}`);
+app.listen(PORT, "0.0.0.0", function() {
+  console.log("Sportfolio AFL 2026 running on port " + PORT);
 });
