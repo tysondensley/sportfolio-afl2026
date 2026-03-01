@@ -68,13 +68,120 @@ function makeInitialState() {
       tradesThisRound: 0, consecutiveTop4: {}
     };
   });
-  return { round: 0, ladder, prevLadder: null, players, lastUpdated: Date.now() };
+  return { round: 0, ladder, prevLadder: null, players, lastUpdated: Date.now(), fixtures: {
+    1: [ // Opening Round
+      ["Sydney Swans","Carlton"],
+      ["Gold Coast Suns","Geelong"],
+      ["GWS Giants","Hawthorn"],
+      ["Brisbane Lions","Western Bulldogs"],
+      ["St Kilda","Collingwood"]
+    ],
+    2: [ // Round 1
+      ["Carlton","Richmond"],
+      ["Essendon","Hawthorn"],
+      ["Western Bulldogs","GWS Giants"],
+      ["Geelong","Fremantle"],
+      ["Sydney Swans","Brisbane Lions"],
+      ["Collingwood","Adelaide"],
+      ["North Melbourne","Port Adelaide"],
+      ["Melbourne","St Kilda"],
+      ["Gold Coast Suns","West Coast"]
+    ],
+    3: [ // Round 2
+      ["Hawthorn","Sydney Swans"],
+      ["Adelaide","Western Bulldogs"],
+      ["Richmond","Gold Coast Suns"],
+      ["GWS Giants","St Kilda"],
+      ["Fremantle","Melbourne"],
+      ["Port Adelaide","Essendon"],
+      ["West Coast","North Melbourne"]
+    ],
+    4: [ // Round 3
+      ["Geelong","Adelaide"],
+      ["Collingwood","GWS Giants"],
+      ["St Kilda","Brisbane Lions"],
+      ["Fremantle","Richmond"],
+      ["Essendon","North Melbourne"],
+      ["Port Adelaide","West Coast"],
+      ["Carlton","Melbourne"]
+    ],
+    5: [ // Round 4
+      ["Brisbane Lions","Collingwood"],
+      ["North Melbourne","Carlton"],
+      ["Adelaide","Fremantle"],
+      ["Richmond","Port Adelaide"],
+      ["West Coast","Sydney Swans"],
+      ["Melbourne","Gold Coast Suns"],
+      ["Western Bulldogs","Essendon"],
+      ["Hawthorn","Geelong"]
+    ],
+    6: [ // Round 5
+      ["Adelaide","Carlton"],
+      ["Collingwood","Fremantle"],
+      ["North Melbourne","Brisbane Lions"],
+      ["Essendon","Melbourne"],
+      ["Sydney Swans","Gold Coast Suns"],
+      ["Hawthorn","Western Bulldogs"],
+      ["Geelong","West Coast"],
+      ["GWS Giants","Richmond"],
+      ["Port Adelaide","St Kilda"]
+    ],
+    7: [ // Round 6
+      ["Carlton","Collingwood"],
+      ["Geelong","Western Bulldogs"],
+      ["Sydney Swans","GWS Giants"],
+      ["Gold Coast Suns","Essendon"],
+      ["Hawthorn","Port Adelaide"],
+      ["Adelaide","St Kilda"],
+      ["North Melbourne","Richmond"],
+      ["Melbourne","Brisbane Lions"],
+      ["West Coast","Fremantle"]
+    ],
+    8: [ // Round 7
+      ["Western Bulldogs","Sydney Swans"],
+      ["Richmond","Melbourne"],
+      ["Hawthorn","Gold Coast Suns"],
+      ["Essendon","Collingwood"],
+      ["Port Adelaide","Geelong"],
+      ["Fremantle","Carlton"],
+      ["St Kilda","West Coast"],
+      ["Brisbane Lions","Adelaide"],
+      ["GWS Giants","North Melbourne"]
+    ],
+    9: [ // Round 8
+      ["Collingwood","Hawthorn"],
+      ["Western Bulldogs","Fremantle"],
+      ["Adelaide","Port Adelaide"],
+      ["Essendon","Brisbane Lions"],
+      ["West Coast","Richmond"],
+      ["Geelong","North Melbourne"],
+      ["Carlton","St Kilda"],
+      ["Sydney Swans","Melbourne"],
+      ["Gold Coast Suns","GWS Giants"]
+    ],
+    10: [ // Round 9
+      ["Fremantle","Hawthorn"],
+      ["Brisbane Lions","Carlton"],
+      ["Port Adelaide","Western Bulldogs"],
+      ["North Melbourne","Sydney Swans"],
+      ["GWS Giants","Essendon"],
+      ["Gold Coast Suns","St Kilda"],
+      ["Geelong","Collingwood"],
+      ["Melbourne","West Coast"],
+      ["Richmond","Adelaide"]
+    ]
+  }};
 }
 
 function loadState() {
   try {
     if (fs.existsSync(STATE_FILE)) {
-      return JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
+      const saved = JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
+      // Merge fixtures from initial state if missing
+      if (!saved.fixtures) {
+        saved.fixtures = makeInitialState().fixtures;
+      }
+      return saved;
     }
   } catch (e) {
     console.error("Error loading state:", e);
