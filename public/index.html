@@ -364,16 +364,6 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
               </ol>
             </div>
           </div>
-          <div class="card" style="margin-bottom:1rem">
-            <div class="card-hd">
-              <div class="card-title">Fixtures</div>
-              <button class="btn primary sm" onclick="saveFixtures()">Save Fixtures</button>
-            </div>
-            <div class="card-body">
-              <p style="font-size:.75rem;color:var(--muted);margin-bottom:.875rem">Enter all fixtures once at the start of the season. Leave both teams blank for a bye round. The ladder will automatically show each team's next 3 opponents.</p>
-              <div id="fixtureInputs"></div>
-            </div>
-          </div>
           <div class="card">
             <div class="card-hd">
               <div class="card-title">Current Standings</div>
@@ -837,9 +827,9 @@ function renderAdmin() {
       <span class="mono">${fmt(p.val)}</span>
     </div>`).join("");
 
-  // Fixtures
+  // Fixtures - only build if not already present
   const fixtureEl = document.getElementById("fixtureInputs");
-  fixtureEl.innerHTML = "";
+  if (fixtureEl.children.length === 0) {
   const teamNames = gs.ladder.map(t=>t.name);
   const teamOptions = `<option value="">— bye —</option>`+teamNames.map(n=>`<option value="${n}">${n}</option>`).join("");
   const fixtures = gs.fixtures || {};
@@ -879,6 +869,7 @@ function renderAdmin() {
       }
     }
   }, 50);
+  } // end if fixtureEl.children.length === 0
 }
 
 // ── ADMIN ACTIONS ────────────────────────────────────────────
