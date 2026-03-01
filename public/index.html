@@ -731,15 +731,14 @@ function renderPortfolio() {
       <div class="card">
         <div class="card-hd"><div class="card-title">Trade Log</div></div>
         <div class="card-body">
-          ${vP.tradeLog.length===0?`<div class="empty-state"><div class="empty-icon">📋</div>No trades yet.</div>`:
-            [...vP.tradeLog].reverse().slice(0,20).map(t=>`
-              <div class="tlog-item">
-                <div><span class="tlog-type ${t.type==="buy"?"tlog-buy":"tlog-sell"}">${t.type.toUpperCase()}</span>${t.team}</div>
-                <div style="text-align:right;font-family:'DM Mono',monospace">
-                  <div>${fmt(t.value)}</div>
-                  <div style="font-size:.68rem;color:var(--muted)">${getRoundLabel(t.round)} · Fee ${fmt(t.fee)}</div>
-                </div>
-              </div>`).join("")}
+          ${(()=>{
+            if(vP.tradeLog.length===0) return '<div class="empty-state"><div class="empty-icon">📋</div>No trades yet.</div>';
+            return [...vP.tradeLog].reverse().slice(0,20).map(t=>{
+              const canUndo = t.id && t.round===gameState.round && vP.name===currentPlayer;
+              const undoHtml = canUndo ? '<button class="btn sm danger" style="margin-top:.3rem;font-size:.62rem;padding:.2rem .5rem" onclick="undoTrade(\''+t.id+'\')">↩ Undo</button>' : '';
+              return '<div class="tlog-item"><div><span class="tlog-type '+(t.type==="buy"?"tlog-buy":"tlog-sell")+'">'+ t.type.toUpperCase()+'</span>'+t.team+'</div><div style="text-align:right;font-family:DM Mono,monospace"><div>'+fmt(t.value)+'</div><div style="font-size:.68rem;color:var(--muted)">'+getRoundLabel(t.round)+' · Fee '+fmt(t.fee)+'</div>'+undoHtml+'</div></div>';
+            }).join('');
+          })()}
         </div>
       </div>
     </div>
@@ -873,6 +872,16 @@ function renderAdmin() {
 }
 
 // ── ADMIN ACTIONS ────────────────────────────────────────────
+async function undoTrade(tradeId) {
+  if (!confirm("Undo this trade? Your shares and fees will be fully reversed.")) return;
+  try {
+    const data = await api("/api/undo","POST",{playerName:currentPlayer, tradeId});
+    gameState = data.state;
+    renderAll();
+    showToast("success","Trade undone","Shares and fees have been reversed.");
+  } catch(e) { showToast("error","Undo failed",e.message); }
+}
+
 async function saveFixtures() {
   const fixtures = {};
   for (let r=1; r<=10; r++) {
