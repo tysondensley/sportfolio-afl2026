@@ -1081,6 +1081,7 @@ async function submitBuy() {
     renderAll();
     showToast("success","Buy confirmed",`${data.shares.toLocaleString()} shares in ${activeBuyTeam} for ${fmt(data.cost)}`);
   } catch(e) {
+    console.error("Buy error:", e, e.stack);
     showToast("error","Trade failed",e.message);
     document.getElementById("buyConfirmBtn").disabled=false;
   }
