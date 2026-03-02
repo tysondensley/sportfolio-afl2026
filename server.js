@@ -313,9 +313,10 @@ app.post("/api/buy", (req, res) => {
   if (!HUMAN_PLAYERS.includes(playerName)) return res.status(403).json({ error: "Not a human player" });
   const gs = loadState();
   if (gs.round >= TOTAL_ROUNDS) return res.status(400).json({ error: "Season complete" });
+  if (gs.tradeDeadline && Date.now() > new Date(gs.tradeDeadline).getTime())
+    return res.status(400).json({ error: "Trade window closed — round has started." });
 
   const player = gs.players[playerName];
-  const price = getPrice(teamName, gs.ladder);
   const fee = getBrokerageFee(player, gs.ladder);
   const shares = Math.floor(parseFloat(amount) / price);
   const cost = shares * price;
@@ -353,6 +354,8 @@ app.post("/api/sell", (req, res) => {
   if (!HUMAN_PLAYERS.includes(playerName)) return res.status(403).json({ error: "Not a human player" });
   const gs = loadState();
   if (gs.round >= TOTAL_ROUNDS) return res.status(400).json({ error: "Season complete" });
+  if (gs.tradeDeadline && Date.now() > new Date(gs.tradeDeadline).getTime())
+    return res.status(400).json({ error: "Trade window closed — round has started." });
 
   const player = gs.players[playerName];
   const h = player.holdings.find(hh => hh.team === teamName);
@@ -460,6 +463,32 @@ app.post("/api/admin/advance", (req, res) => {
   ALL_PLAYERS.forEach(n => gs.players[n].tradesThisRound = 0);
   gs.prevLadder = JSON.parse(JSON.stringify(gs.ladder));
   gs.round += 1;
+
+  // Save snapshot of all players at round start
+  gs.snapshot = {};
+  ALL_PLAYERS.forEach(n => {
+    gs.snapshot[n] = {
+      cash: gs.players[n].cash,
+      holdings: JSON.parse(JSON.stringify(gs.players[n].holdings)),
+      total: getTotal(gs.players[n], gs.ladder)
+    };
+  });
+
+  // Clear deadline — new trading window is open, no deadline set yet
+  gs.tradeDeadline = null;
+  gs.status = "trading"; // "trading" or "lockout"
+
+  saveState(gs);
+  res.json({ success: true, state: gs });
+});
+
+// Admin: set trade deadline
+app.post("/api/admin/deadline", (req, res) => {
+  const { playerName, deadline } = req.body;
+  if (playerName !== "Tyson") return res.status(403).json({ error: "Admin only" });
+  const gs = loadState();
+  gs.tradeDeadline = deadline; // ISO datetime string
+  gs.status = "trading";
   saveState(gs);
   res.json({ success: true, state: gs });
 });
