@@ -667,7 +667,7 @@ function renderLadder() {
       chgHtml = `<span style="font-family:'DM Mono',monospace;font-size:.72rem;padding:.18rem .45rem;border-radius:4px;background:${bg};color:${color}">${chg>0.01?`▲$${chg.toFixed(2)}`:chg<-0.01?`▼$${Math.abs(chg).toFixed(2)}`:"—"}</span>`;
     }
     const interestNote = pos<=4?`<span style="font-size:.58rem;color:var(--up);margin-left:.4rem">+${INTEREST_RATES[pos]*100}%/wk</span>`:pos===18?`<span style="font-size:.58rem;color:var(--down);margin-left:.4rem">-1%/wk</span>`:"";
-    const holdingHtml = myH?`<span style="font-family:'DM Mono',monospace;font-size:.72rem;color:var(--accent)">${fmtS(myH.shares)}</span>`:`<span style="color:var(--dim);font-size:.72rem">—</span>`;
+    const holdingHtml = myH?`<span style="font-family:'DM Mono',monospace;font-size:.72rem;color:var(--accent)">${fmt(myH.shares*price)}</span>`:`<span style="color:var(--dim);font-size:.72rem">—</span>`;
 
     // Upcoming opponents
     const fixtures = gs.fixtures || {};
@@ -727,13 +727,14 @@ function renderPortfolio() {
   const isViewingSelf = viewingPlayer === currentPlayer;
   const liveP = gs.players[viewingPlayer];
   // During trading window, show snapshot for other players; always show live for yourself
-  const vP = (useSnapshot && !isViewingSelf) ? {
+  const snapP = useSnapshot && !isViewingSelf && gs.snapshot && gs.snapshot[viewingPlayer];
+  const vP = snapP ? {
     ...liveP,
-    cash: gs.snapshot[viewingPlayer].cash,
-    holdings: gs.snapshot[viewingPlayer].holdings,
+    cash: snapP.cash,
+    holdings: snapP.holdings,
     tradesThisRound: 0
   } : liveP;
-  const vTotal = useSnapshot && !isViewingSelf ? gs.snapshot[viewingPlayer].total : getTotal(liveP);
+  const vTotal = snapP ? snapP.total : getTotal(liveP);
   const vChg = vTotal-10000;
   const canAct = isViewingSelf && gs.round<10 && !(deadline && Date.now()>deadline);
   const isOpen = gs.round<10;
@@ -804,7 +805,7 @@ function renderLeaderboard() {
   const deadline = gs.tradeDeadline ? new Date(gs.tradeDeadline).getTime() : null;
   const isLocked = deadline && Date.now() > deadline;
   const useSnapshot = !isLocked && gs.round > 0 && gs.snapshot;
-  const getVal = (name) => useSnapshot ? gs.snapshot[name].total : getTotal(gs.players[name]);
+  const getVal = (name) => (useSnapshot && gs.snapshot && gs.snapshot[name]) ? gs.snapshot[name].total : getTotal(gs.players[name]);
   const ranked = ALL_PLAYERS.map(n=>({name:n,val:getVal(n),isH:HUMAN_PLAYERS.includes(n)})).sort((a,b)=>b.val-a.val);
   const list = document.getElementById("lbList");
   list.innerHTML = "";
@@ -1079,7 +1080,7 @@ async function submitBuy() {
     gameState = data.state;
     closeBuyModal();
     renderAll();
-    showToast("success","Buy confirmed",`${data.shares.toLocaleString()} shares in ${activeBuyTeam} for ${fmt(data.cost)}`);
+    showToast("success","Buy confirmed",`${Math.floor(data.shares).toLocaleString()} shares in ${activeBuyTeam} for ${fmt(data.cost)}`);
   } catch(e) {
     console.error("Buy error:", e, e.stack);
     showToast("error","Trade failed",e.message);
