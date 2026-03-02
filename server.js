@@ -317,6 +317,7 @@ app.post("/api/buy", (req, res) => {
     return res.status(400).json({ error: "Trade window closed — round has started." });
 
   const player = gs.players[playerName];
+  const price = getPrice(teamName, gs.ladder);
   const fee = getBrokerageFee(player, gs.ladder);
   const shares = Math.floor(parseFloat(amount) / price);
   const cost = shares * price;
