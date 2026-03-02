@@ -352,7 +352,18 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
         </div>
         <div>
           <div class="card" style="margin-bottom:1rem">
-            <div class="card-hd"><div class="card-title">Weekly Process</div></div>
+            <div class="card-hd">
+              <div class="card-title">Trade Deadline</div>
+              <button class="btn primary sm" onclick="saveDeadline()">Set Deadline</button>
+            </div>
+            <div class="card-body">
+              <p style="font-size:.75rem;color:var(--muted);margin-bottom:.75rem">Set the deadline for this round's trading window — 30 mins before the first game. Once this time passes, trading locks automatically and all portfolios are revealed.</p>
+              <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
+                <input type="datetime-local" id="deadlineInput" class="admin-input" style="width:auto;font-size:.8rem;padding:.4rem .6rem">
+                <span id="deadlineStatus" style="font-size:.75rem;color:var(--muted)"></span>
+              </div>
+            </div>
+          </div>
             <div class="card-body" style="font-size:.8rem;line-height:1.75;color:var(--muted)">
               <p style="margin-bottom:.75rem"><strong style="color:var(--text)">Each week as admin (Tyson):</strong></p>
               <ol style="margin-left:1.1rem;display:flex;flex-direction:column;gap:.35rem">
@@ -576,6 +587,9 @@ function updateHeaderUI() {
   document.getElementById("lbRoundLabel").textContent = getRoundFullLabel(gs.round);
   document.getElementById("adminRoundNum").textContent = getNextRoundName(gs.round+1);
   const isOpen = gs.round < 10;
+  const now = Date.now();
+  const deadline = gs.tradeDeadline ? new Date(gs.tradeDeadline).getTime() : null;
+  const isLocked = deadline && now > deadline;
   const banner = document.getElementById("tradingBanner");
   if (!isOpen) {
     banner.className="banner closed";
@@ -583,9 +597,23 @@ function updateHeaderUI() {
   } else if (gs.round===0) {
     banner.className="banner open";
     banner.innerHTML='<div><span class="dot live"></span><strong>Pre-Season Trading Open</strong> — Initial investments now accepted. 3-round hold applies.</div><div style="font-family:\'DM Mono\',monospace;font-size:.75rem;color:var(--muted)">Brokerage: 0.5% of portfolio</div>';
+  } else if (isLocked) {
+    banner.className="banner closed";
+    banner.innerHTML=`<div><span class="dot off"></span><strong>Trading Locked</strong> — ${getRoundName(gs.round)} is underway. All portfolios now visible.</div>`;
   } else {
     banner.className="banner open";
-    banner.innerHTML=`<div><span class="dot live"></span><strong>${getRoundName(gs.round)} Complete — Trading Open</strong></div><div style="font-family:'DM Mono',monospace;font-size:.75rem;color:var(--muted)">Brokerage: 0.5% of portfolio · doubles each trade</div>`;
+    let deadlineHtml = "";
+    if (deadline) {
+      const mins = Math.max(0, Math.floor((deadline - now) / 60000));
+      const hrs = Math.floor(mins / 60);
+      const m = mins % 60;
+      const timeStr = hrs > 0 ? `${hrs}h ${m}m` : `${m}m`;
+      deadlineHtml = `<span style="font-family:'DM Mono',monospace;font-size:.72rem;color:var(--accent);margin-left:.75rem">⏱ ${timeStr} remaining</span>`;
+    } else {
+      deadlineHtml = `<span style="font-family:'DM Mono',monospace;font-size:.72rem;color:var(--muted);margin-left:.75rem">No deadline set</span>`;
+    }
+    banner.className="banner open";
+    banner.innerHTML=`<div><span class="dot live"></span><strong>${getRoundName(gs.round)} Complete — Trading Open</strong>${deadlineHtml}</div><div style="font-family:'DM Mono',monospace;font-size:.75rem;color:var(--muted)">Brokerage: 0.5% of portfolio · doubles each trade · Portfolios hidden until deadline</div>`;
   }
   const myP = gs.players[currentPlayer];
   const myTotal = getTotal(myP);
@@ -611,13 +639,17 @@ function renderLadder() {
   tbody.innerHTML = "";
   const myP = gs.players[currentPlayer];
   const isOpen = gs.round<10;
+  const deadline = gs.tradeDeadline ? new Date(gs.tradeDeadline).getTime() : null;
+  const isLocked = deadline && Date.now() > deadline;
+  // During trading window, show snapshot holdings (end of last round); after lockout show live
+  const displayP = (!isLocked && gs.round > 0 && gs.snapshot) ? gs.snapshot[currentPlayer] : myP;
 
   gs.ladder.forEach((team,idx) => {
     const pos = idx+1;
     const price = PRICE_SCALE[pos];
     const prevPrice = gs.prevLadder ? getPrice(team.name,gs.prevLadder) : price;
     const chg = price-prevPrice;
-    const myH = myP.holdings.find(h=>h.team===team.name);
+    const myH = displayP.holdings ? displayP.holdings.find(h=>h.team===team.name) : myP.holdings.find(h=>h.team===team.name);
     let posClass = pos<=4?"pos-top4":pos<=8?"pos-top8":pos===18?"pos-bot":"pos-mid";
     let chgHtml = "<span style='color:var(--muted)'>—</span>";
     if (gs.prevLadder) {
@@ -660,7 +692,7 @@ function renderLadder() {
       <td>${chgHtml}</td>
       <td>${holdingHtml}</td>
       <td class="hide-mob">${upcomingHtml}</td>
-      <td><button class="buy-btn" onclick="openBuyModal('${team.name}')" ${!isOpen?"disabled":""}>BUY</button></td>
+      <td><button class="buy-btn" onclick="openBuyModal('${team.name}')" ${!isOpen || isLocked?"disabled":""}>BUY</button></td>
     `;
     tbody.appendChild(tr);
   });
@@ -668,6 +700,9 @@ function renderLadder() {
 
 function renderPortfolio() {
   const gs = gameState;
+  const deadline = gs.tradeDeadline ? new Date(gs.tradeDeadline).getTime() : null;
+  const isLocked = deadline && Date.now() > deadline;
+  const useSnapshot = !isLocked && gs.round > 0 && gs.snapshot;
   // Player tabs
   const tabs = document.getElementById("playerTabs");
   tabs.innerHTML = "";
@@ -680,14 +715,24 @@ function renderPortfolio() {
     tabs.appendChild(btn);
   });
 
-  const vP = gs.players[viewingPlayer];
-  const vTotal = getTotal(vP);
+  const isViewingSelf = viewingPlayer === currentPlayer;
+  const liveP = gs.players[viewingPlayer];
+  // During trading window, show snapshot for other players; always show live for yourself
+  const vP = (useSnapshot && !isViewingSelf) ? {
+    ...liveP,
+    cash: gs.snapshot[viewingPlayer].cash,
+    holdings: gs.snapshot[viewingPlayer].holdings,
+    tradesThisRound: 0
+  } : liveP;
+  const vTotal = useSnapshot && !isViewingSelf ? gs.snapshot[viewingPlayer].total : getTotal(liveP);
   const vChg = vTotal-10000;
-  const canAct = viewingPlayer===currentPlayer && gs.round<10;
+  const canAct = isViewingSelf && gs.round<10 && !(deadline && Date.now()>deadline);
   const isOpen = gs.round<10;
+  const hiddenBanner = (useSnapshot && !isViewingSelf) ? `<div class="banner closed" style="margin-bottom:1rem"><div><span class="dot off"></span>Showing <strong>${viewingPlayer}'s</strong> portfolio as at end of last round. Live trades hidden until deadline.</div></div>` : "";
 
   const content = document.getElementById("portfolioContent");
   content.innerHTML = `
+    ${hiddenBanner}
     <div class="stats-row">
       <div class="stat-card"><div class="stat-label">Total Portfolio</div><div class="stat-val" style="color:${vChg>=0?"var(--up)":"var(--down)"}">${fmt(vTotal)}</div><div class="stat-sub" style="color:${vChg>=0?"var(--up)":"var(--down)"}">${fmtD(vChg)} (${fmtP(vChg/10000*100)})</div></div>
       <div class="stat-card"><div class="stat-label">Cash</div><div class="stat-val" style="color:var(--blue)">${fmt(vP.cash)}</div></div>
@@ -747,7 +792,11 @@ function renderPortfolio() {
 
 function renderLeaderboard() {
   const gs = gameState;
-  const ranked = ALL_PLAYERS.map(n=>({name:n,val:getTotal(gs.players[n]),isH:HUMAN_PLAYERS.includes(n)})).sort((a,b)=>b.val-a.val);
+  const deadline = gs.tradeDeadline ? new Date(gs.tradeDeadline).getTime() : null;
+  const isLocked = deadline && Date.now() > deadline;
+  const useSnapshot = !isLocked && gs.round > 0 && gs.snapshot;
+  const getVal = (name) => useSnapshot ? gs.snapshot[name].total : getTotal(gs.players[name]);
+  const ranked = ALL_PLAYERS.map(n=>({name:n,val:getVal(n),isH:HUMAN_PLAYERS.includes(n)})).sort((a,b)=>b.val-a.val);
   const list = document.getElementById("lbList");
   list.innerHTML = "";
   ranked.forEach((p,i)=>{
@@ -818,6 +867,23 @@ function renderAdmin() {
     inputs.appendChild(div);
   });
 
+  // Populate deadline input
+  const dlInput = document.getElementById("deadlineInput");
+  const dlStatus = document.getElementById("deadlineStatus");
+  if (dlInput) {
+    if (gs.tradeDeadline) {
+      const d = new Date(gs.tradeDeadline);
+      const local = new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,16);
+      dlInput.value = local;
+      const isLocked = Date.now() > d.getTime();
+      dlStatus.textContent = isLocked ? "🔒 Trading locked" : "⏱ Trading open until " + d.toLocaleString();
+      dlStatus.style.color = isLocked ? "var(--down)" : "var(--up)";
+    } else {
+      dlStatus.textContent = "No deadline set — trading open indefinitely";
+      dlStatus.style.color = "var(--muted)";
+    }
+  }
+
   const standings = document.getElementById("adminStandings");
   const ranked = ALL_PLAYERS.map(n=>({name:n,val:getTotal(gs.players[n])})).sort((a,b)=>b.val-a.val);
   standings.innerHTML = ranked.map((p,i)=>`
@@ -872,6 +938,18 @@ function renderAdmin() {
 }
 
 // ── ADMIN ACTIONS ────────────────────────────────────────────
+async function saveDeadline() {
+  const val = document.getElementById("deadlineInput").value;
+  if (!val) { showToast("error","No deadline","Please pick a date and time."); return; }
+  const isoStr = new Date(val).toISOString();
+  try {
+    const data = await api("/api/admin/deadline","POST",{playerName:"Tyson",deadline:isoStr});
+    gameState = data.state;
+    renderAll();
+    showToast("success","Deadline set","Trading will lock automatically at the set time.");
+  } catch(e) { showToast("error","Failed",e.message); }
+}
+
 async function undoTrade(tradeId) {
   if (!confirm("Undo this trade? Your shares and fees will be fully reversed.")) return;
   try {
