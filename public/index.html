@@ -367,7 +367,8 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
             <div class="card-body">
               <p style="font-size:.75rem;color:var(--muted);margin-bottom:.75rem">Set the deadline for this round's trading window — 30 mins before the first game. Once this time passes, trading locks automatically and all portfolios are revealed.</p>
               <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
-                <input type="datetime-local" id="deadlineInput" class="admin-input" style="width:auto;font-size:.8rem;padding:.4rem .6rem">
+                <input type="date" id="deadlineDateInput" class="admin-input" style="width:auto;font-size:.8rem;padding:.4rem .6rem">
+                <input type="time" id="deadlineTimeInput" class="admin-input" style="width:auto;font-size:.8rem;padding:.4rem .6rem">
                 <span id="deadlineStatus" style="font-size:.75rem;color:var(--muted)"></span>
               </div>
             </div>
@@ -876,13 +877,15 @@ function renderAdmin() {
   });
 
   // Populate deadline input
-  const dlInput = document.getElementById("deadlineInput");
+  const dlDateInput = document.getElementById("deadlineDateInput");
+  const dlTimeInput = document.getElementById("deadlineTimeInput");
   const dlStatus = document.getElementById("deadlineStatus");
-  if (dlInput) {
+  if (dlDateInput && dlTimeInput) {
     if (gs.tradeDeadline) {
       const d = new Date(gs.tradeDeadline);
-      const local = new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,16);
-      dlInput.value = local;
+      const local = new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString();
+      dlDateInput.value = local.slice(0,10);
+      dlTimeInput.value = local.slice(11,16);
       const isLocked = Date.now() > d.getTime();
       dlStatus.textContent = isLocked ? "🔒 Trading locked" : "⏱ Trading open until " + d.toLocaleString();
       dlStatus.style.color = isLocked ? "var(--down)" : "var(--up)";
@@ -947,9 +950,10 @@ function renderAdmin() {
 
 // ── ADMIN ACTIONS ────────────────────────────────────────────
 async function saveDeadline() {
-  const val = document.getElementById("deadlineInput").value;
-  if (!val) { showToast("error","No deadline","Please pick a date and time."); return; }
-  const isoStr = new Date(val).toISOString();
+  const dateVal = document.getElementById("deadlineDateInput").value;
+  const timeVal = document.getElementById("deadlineTimeInput").value;
+  if (!dateVal || !timeVal) { showToast("error","No deadline","Please pick both a date and time."); return; }
+  const isoStr = new Date(dateVal + "T" + timeVal).toISOString();
   try {
     const data = await api("/api/admin/deadline","POST",{playerName:"Tyson",deadline:isoStr});
     gameState = data.state;
