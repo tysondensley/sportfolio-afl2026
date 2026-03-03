@@ -423,7 +423,7 @@ Respond ONLY with a valid JSON object in this exact format (no markdown, no expl
 
 // Get full game state
 app.get("/api/state", async (req, res) => {
-  res.json(loadState());
+  res.json(await loadState());
 });
 
 // Buy shares
