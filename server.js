@@ -48,10 +48,6 @@ const TOTAL_ROUNDS = 10;
 const HUMAN_PLAYERS = ["Tyson", "Jas", "Sam"];
 const AI_PLAYERS = ["Alex", "Jordan", "Casey", "Riley", "Morgan", "Quinn", "Blake"];
 const ALL_PLAYERS = [...HUMAN_PLAYERS, ...AI_PLAYERS];
-const AI_STRATEGIES = {
-  Alex:"momentum", Jordan:"blueChip", Casey:"contrarian",
-  Riley:"balanced", Morgan:"passive", Quinn:"momentum", Blake:"contrarian"
-};
 
 // ── STATE HELPERS ─────────────────────────────────────────────
 
@@ -237,33 +233,117 @@ function applyInterestAndTax(players, ladder) {
   });
 }
 
-function runAITrades(players, ladder, round) {
+async function runAITrades(players, ladder, round, fixtures) {
+  // Build context for Claude
+  const roundLabel = round === 1 ? "Opening Round" : `Round ${round - 1}`;
+  const nextRoundLabel = round === 1 ? "Round 1" : `Round ${round}`;
+
+  const ladderSummary = ladder.map((t, i) => `${i+1}. ${t.name} (${t.wins}W-${t.losses}L, ${t.pct.toFixed(1)}%) price=$${PRICE_SCALE[i+1]}`).join("\n");
+
+  const upcomingFixtures = (fixtures && fixtures[round]) 
+    ? fixtures[round].map(m => `${m[0]} vs ${m[1]}`).join("\n")
+    : "Fixtures not available";
+
+  const playerSummaries = AI_PLAYERS.map(name => {
+    const p = players[name];
+    const total = getTotal(p, ladder);
+    const holdings = p.holdings.map(h => {
+      const pos = ladder.findIndex(t => t.name === h.team) + 1;
+      const canSell = canSellHolding(h, round);
+      return `  ${h.team} (pos ${pos}, bought R${h.buyRound}, value=$${(h.shares * getPrice(h.team, ladder)).toFixed(0)}, canSell=${canSell})`;
+    }).join("\n") || "  No holdings";
+    return `${name}: cash=$${p.cash.toFixed(0)}, total=$${total.toFixed(0)}, tradesThisRound=0\nHoldings:\n${holdings}`;
+  }).join("\n\n");
+
+  const prompt = `You are managing 7 AI players in a fantasy AFL sharemarket game called Sportfolio. The season is AFL 2026.
+
+GAME RULES:
+- Each player starts with $10,000
+- Share prices based on ladder position: 1st=$6.12 down to 18th=$1.00
+- Max 25% of portfolio in any single team
+- 2-round minimum hold before selling
+- Brokerage fee: 0.5% of portfolio, doubles each trade this round
+- Interest paid on top 4 holdings, tax on 18th place
+
+CURRENT STATE (after ${roundLabel}):
+LADDER:
+${ladderSummary}
+
+UPCOMING FIXTURES (${nextRoundLabel}):
+${upcomingFixtures}
+
+AI PLAYERS:
+${playerSummaries}
+
+YOUR TASK:
+1. Use web search to research AFL 2026 ${nextRoundLabel} predictions and win probabilities
+2. Consider each team's upcoming fixture difficulty, current form, and ladder trajectory
+3. Decide trades for each AI player — they should make smart, informed decisions based on your research
+4. Each player can make up to 3 trades (buy or sell) but brokerage doubles each trade so be selective
+5. Only suggest sells for holdings where canSell=true
+
+Respond ONLY with a valid JSON object in this exact format (no markdown, no explanation outside JSON):
+{
+  "research": "2-3 sentence summary of what you found about upcoming round predictions",
+  "players": {
+    "Alex": {
+      "reasoning": "1-2 sentences explaining their decision",
+      "trades": [
+        {"type": "buy", "team": "Team Name", "amount": 1500},
+        {"type": "sell", "team": "Team Name"}
+      ]
+    },
+    "Jordan": { "reasoning": "...", "trades": [] },
+    "Casey": { "reasoning": "...", "trades": [] },
+    "Riley": { "reasoning": "...", "trades": [] },
+    "Morgan": { "reasoning": "...", "trades": [] },
+    "Quinn": { "reasoning": "...", "trades": [] },
+    "Blake": { "reasoning": "...", "trades": [] }
+  }
+}`;
+
+  let aiDecisions = null;
+  let researchLog = "AI research unavailable — using fallback logic.";
+
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 2000,
+        tools: [{ type: "web_search_20250305", name: "web_search" }],
+        messages: [{ role: "user", content: prompt }]
+      })
+    });
+
+    const data = await response.json();
+    const textBlock = data.content && data.content.find(b => b.type === "text");
+    if (textBlock) {
+      const clean = textBlock.text.replace(/```json|```/g, "").trim();
+      aiDecisions = JSON.parse(clean);
+      researchLog = aiDecisions.research || researchLog;
+    }
+  } catch (e) {
+    console.error("AI research failed:", e.message);
+  }
+
+  // Apply trades for each AI player
   AI_PLAYERS.forEach(name => {
     const player = players[name];
     player.tradesThisRound = 0;
-    const strategy = AI_STRATEGIES[name];
-    const total = getTotal(player, ladder);
-    const trades = [];
 
-    if ((strategy === "blueChip" || strategy === "passive") && round === 1 && player.holdings.length === 0) {
-      for (let i = 0; i < 4; i++) trades.push({ type:"buy", team:ladder[i].name, amount:2000 });
-    } else if (strategy === "momentum" && round > 1) {
-      const risers = ladder.filter((t,i) => i < 9 && !player.holdings.some(h=>h.team===t.name));
-      if (risers.length > 0 && player.cash > 1000)
-        trades.push({ type:"buy", team:risers[0].name, amount:Math.min(player.cash*0.6, total*PORTFOLIO_CAP) });
-      player.holdings.filter(h => canSellHolding(h,round) && ladder.findIndex(t=>t.name===h.team) > 11)
-        .forEach(h => trades.push({ type:"sell", team:h.team }));
-    } else if (strategy === "contrarian" && round > 1) {
-      const cheap = ladder.slice(9).filter(t => !player.holdings.some(h=>h.team===t.name));
-      if (cheap.length > 0 && player.cash > 1000)
-        trades.push({ type:"buy", team:cheap[0].name, amount:Math.min(player.cash*0.5, total*PORTFOLIO_CAP) });
-    } else if (strategy === "balanced" && round % 3 === 0 && round > 0) {
-      player.holdings.filter(h => canSellHolding(h,round) && ladder.findIndex(t=>t.name===h.team) > 13)
-        .forEach(h => trades.push({ type:"sell", team:h.team }));
-      if (player.cash > 1500) {
-        const pick = ladder.slice(0,6).find(t=>!player.holdings.some(h=>h.team===t.name));
-        if (pick) trades.push({ type:"buy", team:pick.name, amount:Math.min(player.cash*0.7, total*PORTFOLIO_CAP) });
+    let trades = [];
+    if (aiDecisions && aiDecisions.players && aiDecisions.players[name]) {
+      trades = aiDecisions.players[name].trades || [];
+      player.aiReasoning = aiDecisions.players[name].reasoning || "";
+    } else {
+      // Fallback: simple logic if API failed
+      const total = getTotal(player, ladder);
+      if (player.holdings.length === 0 && player.cash > 1000) {
+        trades = [{ type:"buy", team:ladder[0].name, amount:Math.min(player.cash*0.4, total*PORTFOLIO_CAP) }];
       }
+      player.aiReasoning = "Used fallback logic (research unavailable).";
     }
 
     trades.forEach(trade => {
@@ -271,33 +351,36 @@ function runAITrades(players, ladder, round) {
       const fee = getBrokerageFee(player, ladder);
       if (trade.type === "buy") {
         const price = getPrice(trade.team, ladder);
-        const maxInvest = getTotal(player,ladder)*PORTFOLIO_CAP;
-        const existing = player.holdings.find(h=>h.team===trade.team);
-        const existingVal = existing ? existing.shares*price : 0;
-        const available = Math.min(trade.amount, player.cash-fee, maxInvest-existingVal);
-        if (available < 50 || player.cash < fee+available) return;
-        const shares = available/price;
-        player.cash -= (available+fee);
+        if (!price) return;
+        const maxInvest = getTotal(player, ladder) * PORTFOLIO_CAP;
+        const existing = player.holdings.find(h => h.team === trade.team);
+        const existingVal = existing ? existing.shares * price : 0;
+        const available = Math.min(trade.amount, player.cash - fee, maxInvest - existingVal);
+        if (available < 50 || player.cash < fee + available) return;
+        const shares = available / price;
+        player.cash -= (available + fee);
         if (existing) {
-          const tot = existing.shares+shares;
-          existing.buyPrice = (existing.shares*existing.buyPrice+shares*price)/tot;
+          const tot = existing.shares + shares;
+          existing.buyPrice = (existing.shares * existing.buyPrice + shares * price) / tot;
           existing.shares = tot;
         } else {
-          player.holdings.push({ team:trade.team, shares, buyPrice:price, buyRound:round });
+          player.holdings.push({ team: trade.team, shares, buyPrice: price, buyRound: round });
         }
         player.tradesThisRound++;
         player.tradeLog.push({ type:"buy", team:trade.team, value:shares*price, fee, round });
       } else if (trade.type === "sell") {
-        const h = player.holdings.find(hh=>hh.team===trade.team);
-        if (!h || !canSellHolding(h,round)) return;
+        const h = player.holdings.find(hh => hh.team === trade.team);
+        if (!h || !canSellHolding(h, round)) return;
         const price = getPrice(h.team, ladder);
-        player.cash += h.shares*price - fee;
-        player.holdings = player.holdings.filter(hh=>hh.team!==trade.team);
+        player.cash += h.shares * price - fee;
+        player.holdings = player.holdings.filter(hh => hh.team !== trade.team);
         player.tradesThisRound++;
         player.tradeLog.push({ type:"sell", team:h.team, value:h.shares*price, fee, round });
       }
     });
   });
+
+  return researchLog;
 }
 
 // ── API ROUTES ────────────────────────────────────────────────
@@ -453,17 +536,29 @@ app.post("/api/admin/ladder", (req, res) => {
 });
 
 // Admin: advance round
-app.post("/api/admin/advance", (req, res) => {
+app.post("/api/admin/advance", async (req, res) => {
   const { playerName } = req.body;
   if (playerName !== "Tyson") return res.status(403).json({ error: "Admin only" });
   const gs = loadState();
   if (gs.round >= TOTAL_ROUNDS) return res.status(400).json({ error: "Season complete" });
 
   applyInterestAndTax(gs.players, gs.ladder);
-  runAITrades(gs.players, gs.ladder, gs.round + 1);
-  ALL_PLAYERS.forEach(n => gs.players[n].tradesThisRound = 0);
   gs.prevLadder = JSON.parse(JSON.stringify(gs.ladder));
   gs.round += 1;
+
+  // Run AI trades with research
+  const researchLog = await runAITrades(gs.players, gs.ladder, gs.round, gs.fixtures);
+  gs.aiResearchLog = gs.aiResearchLog || [];
+  gs.aiResearchLog.push({
+    round: gs.round,
+    research: researchLog,
+    reasoning: AI_PLAYERS.reduce((acc, name) => {
+      acc[name] = gs.players[name].aiReasoning || "";
+      return acc;
+    }, {})
+  });
+
+  ALL_PLAYERS.forEach(n => gs.players[n].tradesThisRound = 0);
 
   // Save snapshot of all players at round start
   gs.snapshot = {};
@@ -475,9 +570,8 @@ app.post("/api/admin/advance", (req, res) => {
     };
   });
 
-  // Clear deadline — new trading window is open, no deadline set yet
   gs.tradeDeadline = null;
-  gs.status = "trading"; // "trading" or "lockout"
+  gs.status = "trading";
 
   saveState(gs);
   res.json({ success: true, state: gs });
@@ -492,6 +586,12 @@ app.post("/api/admin/deadline", (req, res) => {
   gs.status = "trading";
   saveState(gs);
   res.json({ success: true, state: gs });
+});
+
+// Admin: get AI research log
+app.get("/api/admin/research", (req, res) => {
+  const gs = loadState();
+  res.json({ log: gs.aiResearchLog || [] });
 });
 
 // Admin: save fixtures
