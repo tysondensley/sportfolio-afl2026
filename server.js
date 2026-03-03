@@ -1,10 +1,27 @@
 const express = require("express");
-const fs = require("fs");
 const path = require("path");
+const { Pool } = require("pg");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const STATE_FILE = path.join(__dirname, "gamestate.json");
+
+// PostgreSQL connection
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
+});
+
+// Initialise DB table if needed
+async function initDb() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS gamestate (
+      id INTEGER PRIMARY KEY DEFAULT 1,
+      state JSONB NOT NULL,
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  console.log("Database ready");
+}
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
@@ -169,14 +186,12 @@ function makeInitialState() {
   }};
 }
 
-function loadState() {
+async function loadState() {
   try {
-    if (fs.existsSync(STATE_FILE)) {
-      const saved = JSON.parse(fs.readFileSync(STATE_FILE, "utf8"));
-      // Merge fixtures from initial state if missing
-      if (!saved.fixtures) {
-        saved.fixtures = makeInitialState().fixtures;
-      }
+    const result = await pool.query("SELECT state FROM gamestate WHERE id = 1");
+    if (result.rows.length > 0) {
+      const saved = result.rows[0].state;
+      if (!saved.fixtures) saved.fixtures = makeInitialState().fixtures;
       return saved;
     }
   } catch (e) {
@@ -185,10 +200,14 @@ function loadState() {
   return makeInitialState();
 }
 
-function saveState(state) {
+async function saveState(state) {
   try {
     state.lastUpdated = Date.now();
-    fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+    await pool.query(`
+      INSERT INTO gamestate (id, state, updated_at)
+      VALUES (1, $1, NOW())
+      ON CONFLICT (id) DO UPDATE SET state = $1, updated_at = NOW()
+    `, [JSON.stringify(state)]);
   } catch (e) {
     console.error("Error saving state:", e);
   }
@@ -386,15 +405,15 @@ Respond ONLY with a valid JSON object in this exact format (no markdown, no expl
 // ── API ROUTES ────────────────────────────────────────────────
 
 // Get full game state
-app.get("/api/state", (req, res) => {
+app.get("/api/state", async (req, res) => {
   res.json(loadState());
 });
 
 // Buy shares
-app.post("/api/buy", (req, res) => {
+app.post("/api/buy", async (req, res) => {
   const { playerName, teamName, amount } = req.body;
   if (!HUMAN_PLAYERS.includes(playerName)) return res.status(403).json({ error: "Not a human player" });
-  const gs = loadState();
+  const gs = await loadState();
   if (gs.round >= TOTAL_ROUNDS) return res.status(400).json({ error: "Season complete" });
   if (gs.tradeDeadline && Date.now() > new Date(gs.tradeDeadline).getTime())
     return res.status(400).json({ error: "Trade window closed — round has started." });
@@ -428,15 +447,15 @@ app.post("/api/buy", (req, res) => {
   }
   player.tradeLog.push({ id:tradeId, type:"buy", team:teamName, value:cost, fee, round:gs.round, shares, price, wasNewHolding });
 
-  saveState(gs);
+  await saveState(gs);
   res.json({ success: true, shares, cost, fee, state: gs });
 });
 
 // Sell shares
-app.post("/api/sell", (req, res) => {
+app.post("/api/sell", async (req, res) => {
   const { playerName, teamName, shares } = req.body;
   if (!HUMAN_PLAYERS.includes(playerName)) return res.status(403).json({ error: "Not a human player" });
-  const gs = loadState();
+  const gs = await loadState();
   if (gs.round >= TOTAL_ROUNDS) return res.status(400).json({ error: "Season complete" });
   if (gs.tradeDeadline && Date.now() > new Date(gs.tradeDeadline).getTime())
     return res.status(400).json({ error: "Trade window closed — round has started." });
@@ -464,15 +483,15 @@ app.post("/api/sell", (req, res) => {
   }
   player.tradeLog.push({ id:tradeId, type:"sell", team:teamName, value:sellShares*price, fee, round:gs.round, shares:sellShares, price, prevBuyPrice, prevBuyRound });
 
-  saveState(gs);
+  await saveState(gs);
   res.json({ success: true, net, fee, state: gs });
 });
 
 // Undo a trade (current round only)
-app.post("/api/undo", (req, res) => {
+app.post("/api/undo", async (req, res) => {
   const { playerName, tradeId } = req.body;
   if (!HUMAN_PLAYERS.includes(playerName)) return res.status(403).json({ error: "Not a human player" });
-  const gs = loadState();
+  const gs = await loadState();
   const player = gs.players[playerName];
 
   const tradeIdx = player.tradeLog.findIndex(t => t.id === tradeId);
@@ -507,15 +526,15 @@ app.post("/api/undo", (req, res) => {
   player.tradesThisRound = Math.max(0, player.tradesThisRound - 1);
   player.tradeLog.splice(tradeIdx, 1);
 
-  saveState(gs);
+  await saveState(gs);
   res.json({ success: true, state: gs });
 });
 
 // Admin: update ladder
-app.post("/api/admin/ladder", (req, res) => {
+app.post("/api/admin/ladder", async (req, res) => {
   const { playerName, updates } = req.body;
   if (playerName !== "Tyson") return res.status(403).json({ error: "Admin only" });
-  const gs = loadState();
+  const gs = await loadState();
   gs.prevLadder = JSON.parse(JSON.stringify(gs.ladder));
 
   updates.forEach(u => {
@@ -531,7 +550,7 @@ app.post("/api/admin/ladder", (req, res) => {
 
   gs.ladder.sort((a, b) => b.pts !== a.pts ? b.pts - a.pts : b.pct - a.pct);
   gs.ladder.forEach((t, i) => t.pos = i + 1);
-  saveState(gs);
+  await saveState(gs);
   res.json({ success: true, state: gs });
 });
 
@@ -539,7 +558,7 @@ app.post("/api/admin/ladder", (req, res) => {
 app.post("/api/admin/advance", async (req, res) => {
   const { playerName } = req.body;
   if (playerName !== "Tyson") return res.status(403).json({ error: "Admin only" });
-  const gs = loadState();
+  const gs = await loadState();
   if (gs.round >= TOTAL_ROUNDS) return res.status(400).json({ error: "Season complete" });
 
   applyInterestAndTax(gs.players, gs.ladder);
@@ -573,43 +592,43 @@ app.post("/api/admin/advance", async (req, res) => {
   gs.tradeDeadline = null;
   gs.status = "trading";
 
-  saveState(gs);
+  await saveState(gs);
   res.json({ success: true, state: gs });
 });
 
 // Admin: set trade deadline
-app.post("/api/admin/deadline", (req, res) => {
+app.post("/api/admin/deadline", async (req, res) => {
   const { playerName, deadline } = req.body;
   if (playerName !== "Tyson") return res.status(403).json({ error: "Admin only" });
-  const gs = loadState();
+  const gs = await loadState();
   gs.tradeDeadline = deadline; // ISO datetime string
   gs.status = "trading";
-  saveState(gs);
+  await saveState(gs);
   res.json({ success: true, state: gs });
 });
 
 // Admin: get AI research log
-app.get("/api/admin/research", (req, res) => {
-  const gs = loadState();
+app.get("/api/admin/research", async (req, res) => {
+  const gs = await loadState();
   res.json({ log: gs.aiResearchLog || [] });
 });
 
 // Admin: save fixtures
-app.post("/api/admin/fixtures", (req, res) => {
+app.post("/api/admin/fixtures", async (req, res) => {
   const { playerName, fixtures } = req.body;
   if (playerName !== "Tyson") return res.status(403).json({ error: "Admin only" });
-  const gs = loadState();
+  const gs = await loadState();
   gs.fixtures = fixtures;
-  saveState(gs);
+  await saveState(gs);
   res.json({ success: true, state: gs });
 });
 
 // Reset (admin only - emergency use)
-app.post("/api/admin/reset", (req, res) => {
+app.post("/api/admin/reset", async (req, res) => {
   const { playerName, confirm } = req.body;
   if (playerName !== "Tyson" || confirm !== "RESET") return res.status(403).json({ error: "Forbidden" });
   const fresh = makeInitialState();
-  saveState(fresh);
+  await saveState(fresh);
   res.json({ success: true, state: fresh });
 });
 
@@ -618,6 +637,11 @@ app.use(function(req, res) {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-app.listen(PORT, "0.0.0.0", function() {
-  console.log("Sportfolio AFL 2026 running on port " + PORT);
+initDb().then(() => {
+  app.listen(PORT, "0.0.0.0", function() {
+    console.log("Sportfolio AFL 2026 running on port " + PORT);
+  });
+}).catch(err => {
+  console.error("Failed to initialise database:", err);
+  process.exit(1);
 });
