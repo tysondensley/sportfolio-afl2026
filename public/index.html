@@ -754,7 +754,7 @@ function renderPortfolio() {
         <div class="card" style="margin-bottom:1rem">
           <div class="card-hd"><div class="card-title">Portfolio Breakdown</div></div>
           <div class="card-body" style="display:flex;align-items:center;gap:1.5rem;flex-wrap:wrap">
-            <canvas id="pieChart" width="160" height="160" style="flex-shrink:0"></canvas>
+            <div id="pieChartWrap" style="flex-shrink:0;width:160px;height:160px"></div>
             <div id="pieLegend" style="font-size:.75rem;line-height:1.9;flex:1;min-width:120px"></div>
           </div>
         </div>
@@ -806,13 +806,17 @@ function renderPortfolio() {
     </div>
   `;
 
-  // Draw pie chart
-  drawPieChart(vP, vTotal);
+  // Draw pie chart after DOM updates
+  setTimeout(() => drawPieChart(vP, vTotal), 50);
 }
 
 function drawPieChart(vP, vTotal) {
-  const canvas = document.getElementById("pieChart");
-  if (!canvas) return;
+  const wrap = document.getElementById("pieChartWrap");
+  if (!wrap) return;
+  wrap.innerHTML = "";
+  const canvas = document.createElement("canvas");
+  canvas.width = 160; canvas.height = 160;
+  wrap.appendChild(canvas);
   const ctx = canvas.getContext("2d");
   const cx = 80, cy = 80, r = 72;
 
