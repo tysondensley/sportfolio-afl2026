@@ -20,6 +20,16 @@ async function initDb() {
       updated_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+  // Seed initial state if table is empty
+  const result = await pool.query("SELECT id FROM gamestate WHERE id = 1");
+  if (result.rows.length === 0) {
+    const initial = makeInitialState();
+    await pool.query(
+      `INSERT INTO gamestate (id, state, updated_at) VALUES (1, $1, NOW())`,
+      [JSON.stringify(initial)]
+    );
+    console.log("Initial game state seeded into database");
+  }
   console.log("Database ready");
 }
 
