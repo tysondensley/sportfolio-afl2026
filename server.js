@@ -201,13 +201,20 @@ async function loadState() {
     const result = await pool.query("SELECT state FROM gamestate WHERE id = 1");
     if (result.rows.length > 0) {
       const saved = result.rows[0].state;
-      if (!saved.fixtures) saved.fixtures = makeInitialState().fixtures;
-      return saved;
+      // Validate state has required fields
+      if (saved && saved.players && saved.ladder) {
+        if (!saved.fixtures) saved.fixtures = makeInitialState().fixtures;
+        return saved;
+      }
     }
   } catch (e) {
     console.error("Error loading state:", e);
   }
-  return makeInitialState();
+  // No valid state found — seed a fresh one
+  console.log("No valid state found, seeding fresh state...");
+  const fresh = makeInitialState();
+  await saveState(fresh);
+  return fresh;
 }
 
 async function saveState(state) {
