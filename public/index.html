@@ -751,6 +751,13 @@ function renderPortfolio() {
     </div>
     <div class="two-col">
       <div>
+        <div class="card" style="margin-bottom:1rem">
+          <div class="card-hd"><div class="card-title">Portfolio Breakdown</div></div>
+          <div class="card-body" style="display:flex;align-items:center;gap:1.5rem;flex-wrap:wrap">
+            <canvas id="pieChart" width="160" height="160" style="flex-shrink:0"></canvas>
+            <div id="pieLegend" style="font-size:.75rem;line-height:1.9;flex:1;min-width:120px"></div>
+          </div>
+        </div>
         <div class="card">
           <div class="card-hd"><div class="card-title">Holdings</div></div>
           <div class="card-body">
@@ -798,6 +805,55 @@ function renderPortfolio() {
       </div>
     </div>
   `;
+
+  // Draw pie chart
+  drawPieChart(vP, vTotal);
+}
+
+function drawPieChart(vP, vTotal) {
+  const canvas = document.getElementById("pieChart");
+  if (!canvas) return;
+  const ctx = canvas.getContext("2d");
+  const cx = 80, cy = 80, r = 72;
+
+  // Build slices
+  const slices = [];
+  const TEAM_COLORS = ["#FFB400","#4da6ff","#00c97a","#ff4f6d","#a78bfa","#f97316","#06b6d4","#ec4899","#84cc16","#f59e0b","#10b981","#3b82f6","#ef4444","#8b5cf6","#14b8a6","#f43f5e","#22c55e","#6366f1"];
+  vP.holdings.forEach((h, i) => {
+    const price = getPrice(h.team);
+    const val = h.shares * price;
+    slices.push({ label: h.team, val, color: TEAM_COLORS[i % TEAM_COLORS.length] });
+  });
+  if (vP.cash > 0) slices.push({ label: "Cash", val: vP.cash, color: "#4da6ff" });
+
+  if (slices.length === 0) return;
+
+  ctx.clearRect(0, 0, 160, 160);
+  let startAngle = -Math.PI / 2;
+  slices.forEach(s => {
+    const sweep = (s.val / vTotal) * 2 * Math.PI;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, r, startAngle, startAngle + sweep);
+    ctx.closePath();
+    ctx.fillStyle = s.color;
+    ctx.fill();
+    ctx.strokeStyle = "#080b12";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    startAngle += sweep;
+  });
+
+  // Legend
+  const legend = document.getElementById("pieLegend");
+  if (legend) {
+    legend.innerHTML = slices.map(s => `
+      <div style="display:flex;align-items:center;gap:.4rem">
+        <span style="width:9px;height:9px;border-radius:2px;background:${s.color};display:inline-block;flex-shrink:0"></span>
+        <span style="color:var(--muted)">${s.label}</span>
+        <span style="margin-left:auto;font-family:'DM Mono',monospace;color:var(--text)">${Math.round(s.val/vTotal*100)}%</span>
+      </div>`).join("");
+  }
 }
 
 function renderLeaderboard() {
