@@ -199,9 +199,10 @@ function makeInitialState() {
 async function loadState() {
   try {
     const result = await pool.query("SELECT state FROM gamestate WHERE id = 1");
+    console.log("DB rows:", result.rows.length);
     if (result.rows.length > 0) {
       const saved = result.rows[0].state;
-      // Validate state has required fields
+      console.log("State type:", typeof saved, "Keys:", saved ? Object.keys(saved).join(",") : "null");
       if (saved && saved.players && saved.ladder) {
         if (!saved.fixtures) saved.fixtures = makeInitialState().fixtures;
         return saved;
@@ -210,8 +211,7 @@ async function loadState() {
   } catch (e) {
     console.error("Error loading state:", e);
   }
-  // No valid state found — seed a fresh one
-  console.log("No valid state found, seeding fresh state...");
+  console.log("Seeding fresh state...");
   const fresh = makeInitialState();
   await saveState(fresh);
   return fresh;
