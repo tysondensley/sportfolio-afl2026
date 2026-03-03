@@ -607,6 +607,25 @@ app.post("/api/admin/deadline", async (req, res) => {
   res.json({ success: true, state: gs });
 });
 
+// Admin: download backup
+app.get("/api/admin/backup", async (req, res) => {
+  if (req.query.playerName !== "Tyson") return res.status(403).json({ error: "Admin only" });
+  const gs = await loadState();
+  const filename = `sportfolio-backup-round${gs.round}-${new Date().toISOString().slice(0,10)}.json`;
+  res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+  res.setHeader("Content-Type", "application/json");
+  res.send(JSON.stringify(gs, null, 2));
+});
+
+// Admin: restore from backup
+app.post("/api/admin/restore", async (req, res) => {
+  const { playerName, state } = req.body;
+  if (playerName !== "Tyson") return res.status(403).json({ error: "Admin only" });
+  if (!state || !state.players || !state.ladder) return res.status(400).json({ error: "Invalid backup file" });
+  await saveState(state);
+  res.json({ success: true, state });
+});
+
 // Admin: get AI research log
 app.get("/api/admin/research", async (req, res) => {
   const gs = await loadState();
