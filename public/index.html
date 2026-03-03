@@ -383,11 +383,15 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
               </ol>
             </div>
           </div>
-          <div class="card">
+          <div class="card" style="margin-bottom:1rem">
             <div class="card-hd">
-              <div class="card-title">Current Standings</div>
-              <button class="btn sm danger" onclick="confirmReset()">⚠ Reset Game</button>
+              <div class="card-title">AI Research Log</div>
+              <button class="btn sm" onclick="loadResearchLog()">Refresh</button>
             </div>
+            <div class="card-body" id="researchLog">
+              <div class="empty-state"><div class="empty-icon">🔬</div>No AI research yet. Advance a round to see it.</div>
+            </div>
+          </div>
             <div class="card-body" id="adminStandings"></div>
           </div>
         </div>
@@ -918,6 +922,7 @@ function renderLeaderboard() {
 }
 
 function renderAdmin() {
+  loadResearchLog();
   const gs = gameState;
   const inputs = document.getElementById("adminInputs");
   inputs.innerHTML = "";
@@ -1009,6 +1014,28 @@ function renderAdmin() {
 }
 
 // ── ADMIN ACTIONS ────────────────────────────────────────────
+async function loadResearchLog() {
+  try {
+    const data = await api("/api/admin/research");
+    const el = document.getElementById("researchLog");
+    if (!el) return;
+    if (!data.log || data.log.length === 0) {
+      el.innerHTML = '<div class="empty-state"><div class="empty-icon">🔬</div>No AI research yet.</div>';
+      return;
+    }
+    el.innerHTML = [...data.log].reverse().map(entry => `
+      <div style="margin-bottom:1.25rem;padding-bottom:1.25rem;border-bottom:1px solid var(--border)">
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:.78rem;letter-spacing:.1em;color:var(--accent);margin-bottom:.4rem">${getRoundLabel(entry.round)} — Research</div>
+        <div style="font-size:.75rem;color:var(--muted);margin-bottom:.75rem;line-height:1.6">${entry.research}</div>
+        ${AI_PLAYERS.map(name => entry.reasoning[name] ? `
+          <div style="display:flex;gap:.5rem;margin-bottom:.35rem;font-size:.73rem">
+            <span style="color:var(--text);font-weight:600;min-width:52px">${name}</span>
+            <span style="color:var(--muted)">${entry.reasoning[name]}</span>
+          </div>` : "").join("")}
+      </div>`).join("");
+  } catch(e) { console.error("Research log error:", e); }
+}
+
 async function saveDeadline() {
   const dateVal = document.getElementById("deadlineDateInput").value;
   const timeVal = document.getElementById("deadlineTimeInput").value;
