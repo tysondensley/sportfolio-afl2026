@@ -392,6 +392,21 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
               <div class="empty-state"><div class="empty-icon">🔬</div>No AI research yet. Advance a round to see it.</div>
             </div>
           </div>
+          <div class="card" style="margin-bottom:1rem">
+            <div class="card-hd">
+              <div class="card-title">Backup & Restore</div>
+            </div>
+            <div class="card-body">
+              <p style="font-size:.75rem;color:var(--muted);margin-bottom:.875rem">Download a backup of the current game state. If anything goes wrong, you can restore from a backup file.</p>
+              <div style="display:flex;gap:.75rem;flex-wrap:wrap">
+                <button class="btn primary sm" onclick="downloadBackup()">⬇ Download Backup</button>
+                <label class="btn sm" style="cursor:pointer">
+                  ⬆ Restore from Backup
+                  <input type="file" id="restoreFile" accept=".json" style="display:none" onchange="restoreBackup(this)">
+                </label>
+              </div>
+            </div>
+          </div>
             <div class="card-body" id="adminStandings"></div>
           </div>
         </div>
@@ -1014,6 +1029,30 @@ function renderAdmin() {
 }
 
 // ── ADMIN ACTIONS ────────────────────────────────────────────
+function downloadBackup() {
+  window.location.href = `/api/admin/backup?playerName=Tyson`;
+}
+
+async function restoreBackup(input) {
+  const file = input.files[0];
+  if (!file) return;
+  if (!confirm(`Restore from "${file.name}"? This will overwrite the current game state.`)) {
+    input.value = "";
+    return;
+  }
+  try {
+    const text = await file.text();
+    const state = JSON.parse(text);
+    const data = await api("/api/admin/restore", "POST", { playerName: "Tyson", state });
+    gameState = data.state;
+    renderAll();
+    showToast("success", "Restored", `Game state restored from backup successfully.`);
+  } catch(e) {
+    showToast("error", "Restore failed", e.message);
+  }
+  input.value = "";
+}
+
 async function loadResearchLog() {
   try {
     const data = await api("/api/admin/research");
