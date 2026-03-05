@@ -385,7 +385,13 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
           </div>
           <div class="card" style="margin-bottom:1rem">
             <div class="card-hd">
-              <div class="card-title">AI Research Log</div>
+              <div class="card-title">AI Pre-Season Trades</div>
+              <button class="btn primary sm" onclick="triggerAIPreseason()">Run AI Pre-Season</button>
+            </div>
+            <div class="card-body">
+              <p style="font-size:.75rem;color:var(--muted)">Triggers AI players to research and make their pre-season investments. Only run this once at the start of the season. Takes 15–30 seconds.</p>
+            </div>
+          </div>
               <button class="btn sm" onclick="loadResearchLog()">Refresh</button>
             </div>
             <div class="card-body" id="researchLog">
@@ -1051,6 +1057,18 @@ async function restoreBackup(input) {
     showToast("error", "Restore failed", e.message);
   }
   input.value = "";
+}
+
+async function triggerAIPreseason() {
+  if (!confirm("Run AI pre-season trades? This will take 15-30 seconds and should only be done once.")) return;
+  showToast("success", "AI Researching...", "Pre-season trades in progress. Please wait.");
+  try {
+    const data = await api("/api/admin/ai-preseason", "POST", { playerName: "Tyson" });
+    gameState = data.state;
+    renderAll();
+    loadResearchLog();
+    showToast("success", "Done", "AI pre-season trades complete.");
+  } catch(e) { showToast("error", "Failed", e.message); }
 }
 
 async function loadResearchLog() {
