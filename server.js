@@ -23,12 +23,14 @@ async function initDb() {
   // Seed initial state if table is empty
   const result = await pool.query("SELECT id FROM gamestate WHERE id = 1");
   if (result.rows.length === 0) {
+    console.log("No existing state — seeding and running AI pre-season trades...");
     const initial = makeInitialState();
     await pool.query(
       `INSERT INTO gamestate (id, state, updated_at) VALUES (1, $1, NOW())`,
       [JSON.stringify(initial)]
     );
-    console.log("Initial game state seeded into database");
+    // Run AI pre-season investments
+    await runAIPreseason();
   }
   console.log("Database ready");
 }
@@ -267,6 +269,144 @@ function applyInterestAndTax(players, ladder) {
       if (pos === 18) h.shares *= (1 - BOTTOM_TAX);
     });
   });
+}
+
+async function runAIPreseason() {
+  const gs = await loadState();
+  const ladder = gs.ladder;
+
+  const ladderSummary = ladder.map((t, i) =>
+    `${i+1}. ${t.name} - price $${PRICE_SCALE[i+1]}`
+  ).join("\n");
+
+  const upcomingFixtures = (gs.fixtures && gs.fixtures[1])
+    ? gs.fixtures[1].map(m => `${m[0]} vs ${m[1]}`).join("\n")
+    : "Fixtures not available";
+
+  const prompt = `You are managing 7 AI players in a fantasy AFL sharemarket game called Sportfolio for the 2026 season.
+
+GAME RULES:
+- Each player starts with $10,000 cash
+- Share prices based on pre-season ladder position: 1st=$6.12 down to 18th=$1.00
+- Max 25% of portfolio in any single team
+- Must invest at least 50% of portfolio (max $5,000 cash remaining)
+- 2-round minimum hold before selling
+- Brokerage: 0.5% of portfolio per trade, doubles each trade
+
+PRE-SEASON LADDER (based on 2026 premiership odds):
+${ladderSummary}
+
+OPENING ROUND FIXTURES:
+${upcomingFixtures}
+
+YOUR TASK:
+1. Use web search to research 2026 AFL season previews, team strength, and Opening Round predictions
+2. Each AI player must invest at least 50% of their $10,000 (so max $5,000 remaining in cash)
+3. They can make up to 3 buy trades (brokerage doubles each trade so be selective)
+4. Spread investments intelligently based on your research — not all players should buy the same teams
+
+Respond ONLY with valid JSON (no markdown):
+{
+  "research": "2-3 sentence summary of your findings",
+  "players": {
+    "Alex": {
+      "reasoning": "1-2 sentences",
+      "trades": [
+        {"type": "buy", "team": "Team Name", "amount": 2500}
+      ]
+    },
+    "Jordan": { "reasoning": "...", "trades": [] },
+    "Casey": { "reasoning": "...", "trades": [] },
+    "Riley": { "reasoning": "...", "trades": [] },
+    "Morgan": { "reasoning": "...", "trades": [] },
+    "Quinn": { "reasoning": "...", "trades": [] },
+    "Blake": { "reasoning": "...", "trades": [] }
+  }
+}`;
+
+  let aiDecisions = null;
+  let researchSummary = "AI pre-season research unavailable.";
+
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 2000,
+        tools: [{ type: "web_search_20250305", name: "web_search" }],
+        messages: [{ role: "user", content: prompt }]
+      })
+    });
+    const data = await response.json();
+    const textBlock = data.content && data.content.find(b => b.type === "text");
+    if (textBlock) {
+      const clean = textBlock.text.replace(/```json|```/g, "").trim();
+      aiDecisions = JSON.parse(clean);
+      researchSummary = aiDecisions.research || researchSummary;
+    }
+  } catch(e) {
+    console.error("AI preseason research failed:", e.message);
+  }
+
+  // Apply trades
+  AI_PLAYERS.forEach(name => {
+    const player = gs.players[name];
+    player.tradesThisRound = 0;
+
+    let trades = [];
+    if (aiDecisions && aiDecisions.players && aiDecisions.players[name]) {
+      trades = aiDecisions.players[name].trades || [];
+      player.aiReasoning = aiDecisions.players[name].reasoning || "";
+    } else {
+      // Fallback: buy top 2 teams with $2500 each
+      trades = [
+        { type:"buy", team: ladder[0].name, amount: 2500 },
+        { type:"buy", team: ladder[1].name, amount: 2500 }
+      ];
+      player.aiReasoning = "Fallback: invested in top 2 pre-season favourites.";
+    }
+
+    trades.forEach(trade => {
+      if (player.tradesThisRound >= 3) return;
+      if (trade.type !== "buy") return;
+      const price = getPrice(trade.team, ladder);
+      if (!price) return;
+      const fee = getBrokerageFee(player, ladder);
+      const maxInvest = getTotal(player, ladder) * PORTFOLIO_CAP;
+      const existing = player.holdings.find(h => h.team === trade.team);
+      const existingVal = existing ? existing.shares * price : 0;
+      const available = Math.min(trade.amount, player.cash - fee, maxInvest - existingVal);
+      if (available < 50 || player.cash < fee + available) return;
+      const shares = available / price;
+      player.cash -= (available + fee);
+      if (existing) {
+        const tot = existing.shares + shares;
+        existing.buyPrice = (existing.shares * existing.buyPrice + shares * price) / tot;
+        existing.shares = tot;
+      } else {
+        player.holdings.push({ team: trade.team, shares, buyPrice: price, buyRound: 0 });
+      }
+      player.tradesThisRound++;
+      player.tradeLog.push({ type:"buy", team: trade.team, value: shares*price, fee, round: 0 });
+    });
+
+    player.tradesThisRound = 0; // Reset after pre-season
+  });
+
+  // Store research log
+  gs.aiResearchLog = gs.aiResearchLog || [];
+  gs.aiResearchLog.push({
+    round: 0,
+    research: researchSummary,
+    reasoning: AI_PLAYERS.reduce((acc, name) => {
+      acc[name] = gs.players[name].aiReasoning || "";
+      return acc;
+    }, {})
+  });
+
+  await saveState(gs);
+  console.log("AI pre-season trades complete");
 }
 
 async function runAITrades(players, ladder, round, fixtures) {
@@ -641,6 +781,15 @@ app.post("/api/admin/restore", async (req, res) => {
   if (!state || !state.players || !state.ladder) return res.status(400).json({ error: "Invalid backup file" });
   await saveState(state);
   res.json({ success: true, state });
+});
+
+// Admin: trigger AI pre-season trades manually
+app.post("/api/admin/ai-preseason", async (req, res) => {
+  const { playerName } = req.body;
+  if (playerName !== "Tyson") return res.status(403).json({ error: "Admin only" });
+  await runAIPreseason();
+  const gs = await loadState();
+  res.json({ success: true, state: gs });
 });
 
 // Admin: get AI research log
