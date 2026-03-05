@@ -339,11 +339,16 @@ Respond ONLY with valid JSON (no markdown):
       })
     });
     const data = await response.json();
+    console.log("AI API response status:", response.status);
+    console.log("AI API content blocks:", data.content && data.content.map(b => b.type).join(","));
     const textBlock = data.content && data.content.find(b => b.type === "text");
     if (textBlock) {
+      console.log("AI text response (first 200 chars):", textBlock.text.slice(0, 200));
       const clean = textBlock.text.replace(/```json|```/g, "").trim();
       aiDecisions = JSON.parse(clean);
       researchSummary = aiDecisions.research || researchSummary;
+    } else {
+      console.log("No text block found in response:", JSON.stringify(data).slice(0, 300));
     }
   } catch(e) {
     console.error("AI preseason research failed:", e.message);
