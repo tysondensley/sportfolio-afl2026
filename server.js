@@ -772,6 +772,19 @@ app.post("/api/admin/back", async (req, res) => {
   res.json({ success: true, state: gs.previousState });
 });
 
+// Admin: decrement round by 1 without touching portfolios (emergency fix)
+app.post("/api/admin/decrement-round", async (req, res) => {
+  const { playerName } = req.body;
+  if (playerName !== "Tyson") return res.status(403).json({ error: "Admin only" });
+  const gs = await loadState();
+  if (gs.round <= 0) return res.status(400).json({ error: "Already at round 0" });
+  gs.round -= 1;
+  gs.status = "trading";
+  gs.tradeDeadline = null;
+  await saveState(gs);
+  res.json({ success: true, state: gs });
+});
+
 // Admin: set trade deadline
 app.post("/api/admin/deadline", async (req, res) => {
   const { playerName, deadline } = req.body;
