@@ -723,6 +723,10 @@ app.post("/api/admin/advance", async (req, res) => {
   const gs = await loadState();
   if (gs.round >= TOTAL_ROUNDS) return res.status(400).json({ error: "Season complete" });
 
+  // Save full state snapshot before advancing so we can go back if needed
+  gs.previousState = JSON.parse(JSON.stringify(gs));
+  delete gs.previousState.previousState; // Don't nest snapshots
+
   applyInterestAndTax(gs.players, gs.ladder);
   gs.prevLadder = JSON.parse(JSON.stringify(gs.ladder));
   gs.round += 1;
@@ -756,6 +760,16 @@ app.post("/api/admin/advance", async (req, res) => {
 
   await saveState(gs);
   res.json({ success: true, state: gs });
+});
+
+// Admin: go back one round
+app.post("/api/admin/back", async (req, res) => {
+  const { playerName } = req.body;
+  if (playerName !== "Tyson") return res.status(403).json({ error: "Admin only" });
+  const gs = await loadState();
+  if (!gs.previousState) return res.status(400).json({ error: "No previous state to restore." });
+  await saveState(gs.previousState);
+  res.json({ success: true, state: gs.previousState });
 });
 
 // Admin: set trade deadline
