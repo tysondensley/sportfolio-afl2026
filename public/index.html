@@ -393,6 +393,15 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
               <p style="font-size:.75rem;color:var(--muted)">Triggers AI players to research and make their pre-season investments. Only run this once at the start of the season. Takes 15–30 seconds.</p>
             </div>
           </div>
+          <div class="card" style="margin-bottom:1rem">
+            <div class="card-hd">
+              <div class="card-title">Emergency: Decrement Round</div>
+              <button class="btn sm danger" onclick="decrementRound()">− Round</button>
+            </div>
+            <div class="card-body">
+              <p style="font-size:.75rem;color:var(--muted)">Rolls back the round counter by 1 and reopens the trading window. Does NOT undo AI trades or portfolio changes — use only to fix an accidental double-advance.</p>
+            </div>
+          </div>
               <button class="btn sm" onclick="loadResearchLog()">Refresh</button>
             </div>
             <div class="card-body" id="researchLog">
@@ -1059,6 +1068,16 @@ async function restoreBackup(input) {
     showToast("error", "Restore failed", e.message);
   }
   input.value = "";
+}
+
+async function decrementRound() {
+  if (!confirm(`Roll back from Round ${gameState.round} to Round ${gameState.round - 1}? Portfolios and AI trades will NOT be reversed — only the round counter.`)) return;
+  try {
+    const data = await api("/api/admin/decrement-round", "POST", { playerName: "Tyson" });
+    gameState = data.state;
+    renderAll();
+    showToast("success", "Round decremented", `Now on Round ${gameState.round} with trading open.`);
+  } catch(e) { showToast("error", "Failed", e.message); }
 }
 
 async function triggerAIPreseason() {
