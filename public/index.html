@@ -170,6 +170,7 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
 
 @media(max-width:640px){
   .stats-row{grid-template-columns:1fr 1fr}
+  #marketTopRow{grid-template-columns:1fr!important}
   .two-col{grid-template-columns:1fr}
   .holding{grid-template-columns:1fr auto}
   .hide-mob{display:none}
@@ -222,29 +223,31 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
       <div id="tradingBanner" class="banner open">
         <div><span class="dot live"></span><strong>Trading Open</strong></div>
       </div>
-      <div class="stats-row">
-        <div class="stat-card"><div class="stat-label">Your Portfolio</div><div class="stat-val" id="mPortfolio">$10,000</div><div class="stat-sub" id="mPortfolioChg">—</div></div>
-        <div class="stat-card"><div class="stat-label">Cash</div><div class="stat-val" style="color:var(--blue)" id="mCash">$10,000</div><div class="stat-sub" style="color:var(--muted)">Available</div></div>
-        <div class="stat-card"><div class="stat-label">Rank</div><div class="stat-val" id="mRank">#—</div><div class="stat-sub" style="color:var(--muted)">of 10 players</div></div>
-        <div class="stat-card"><div class="stat-label">Trades This Round</div><div class="stat-val" id="mTrades">0</div><div class="stat-sub" style="color:var(--muted)" id="mNextFee">Next fee: —</div></div>
-      </div>
-      <div class="card" id="myHoldingsCard" style="margin-bottom:1rem;display:none">
-        <div class="card-hd">
-          <div class="card-title">Your Holdings</div>
-          <div style="font-size:.7rem;color:var(--muted)" id="myHoldingsTotal"></div>
+      <div style="display:grid;grid-template-columns:200px 1fr;gap:1rem;margin-bottom:1.25rem;align-items:start" id="marketTopRow">
+        <div style="display:flex;flex-direction:column;gap:.6rem">
+          <div class="stat-card"><div class="stat-label">Your Portfolio</div><div class="stat-val" id="mPortfolio">$10,000</div><div class="stat-sub" id="mPortfolioChg">—</div></div>
+          <div class="stat-card"><div class="stat-label">Cash</div><div class="stat-val" style="color:var(--blue)" id="mCash">$10,000</div><div class="stat-sub" style="color:var(--muted)">Available</div></div>
+          <div class="stat-card"><div class="stat-label">Rank</div><div class="stat-val" id="mRank">#—</div><div class="stat-sub" style="color:var(--muted)">of 10 players</div></div>
+          <div class="stat-card"><div class="stat-label">Trades This Round</div><div class="stat-val" id="mTrades">0</div><div class="stat-sub" style="color:var(--muted)" id="mNextFee">Next fee: —</div></div>
         </div>
-        <div style="overflow-x:auto">
-          <table class="tbl">
-            <thead><tr>
-              <th>Team</th>
-              <th style="text-align:right">Shares</th>
-              <th style="text-align:right">Price</th>
-              <th style="text-align:right">Value</th>
-              <th style="text-align:right" class="hide-mob">P&amp;L</th>
-              <th style="text-align:center" class="hide-mob">Hold</th>
-            </tr></thead>
-            <tbody id="myHoldingsBody"></tbody>
-          </table>
+        <div class="card" id="myHoldingsCard" style="display:none">
+          <div class="card-hd">
+            <div class="card-title">Your Holdings</div>
+            <div style="font-size:.7rem;color:var(--muted)" id="myHoldingsTotal"></div>
+          </div>
+          <div style="overflow-x:auto">
+            <table class="tbl">
+              <thead><tr>
+                <th>Team</th>
+                <th style="text-align:right">Shares</th>
+                <th style="text-align:right">Price</th>
+                <th style="text-align:right">Value</th>
+                <th style="text-align:right">P&amp;L</th>
+                <th style="text-align:center">Hold</th>
+              </tr></thead>
+              <tbody id="myHoldingsBody"></tbody>
+            </table>
+          </div>
         </div>
       </div>
       <div class="card">
