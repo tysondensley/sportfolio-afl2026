@@ -61,6 +61,128 @@ const AFL_TEAMS = [
   { name: "West Coast",       emoji: "🌊", odds: 251.00 },
 ];
 
+// ── SQUIGGLE INTEGRATION ──────────────────────────────────────
+
+// Squiggle uses different team name conventions — map to ours
+const SQUIGGLE_NAME_MAP = {
+  "Adelaide":             "Adelaide",
+  "Brisbane":             "Brisbane Lions",
+  "Brisbane Lions":       "Brisbane Lions",
+  "Carlton":              "Carlton",
+  "Collingwood":          "Collingwood",
+  "Essendon":             "Essendon",
+  "Fremantle":            "Fremantle",
+  "Geelong":              "Geelong",
+  "Gold Coast":           "Gold Coast Suns",
+  "Gold Coast Suns":      "Gold Coast Suns",
+  "Greater Western Sydney": "GWS Giants",
+  "GWS":                  "GWS Giants",
+  "GWS Giants":           "GWS Giants",
+  "Hawthorn":             "Hawthorn",
+  "Melbourne":            "Melbourne",
+  "North Melbourne":      "North Melbourne",
+  "Port Adelaide":        "Port Adelaide",
+  "Richmond":             "Richmond",
+  "St Kilda":             "St Kilda",
+  "Sydney":               "Sydney Swans",
+  "Sydney Swans":         "Sydney Swans",
+  "West Coast":           "West Coast",
+  "Western Bulldogs":     "Western Bulldogs",
+};
+
+// Fetch current standings from Squiggle for a given AFL round
+async function fetchSquiggleLadder(aflRound) {
+  const year = 2026;
+  const url = `https://api.squiggle.com.au/?q=standings;year=${year};round=${aflRound}`;
+  try {
+    const res = await fetch(url, {
+      headers: { "User-Agent": "Sportfolio-AFL2026/1.0 (personal fantasy game; contact via github)" }
+    });
+    if (!res.ok) throw new Error(`Squiggle returned ${res.status}`);
+    const data = await res.json();
+    if (!data.standings || data.standings.length === 0) throw new Error("No standings data");
+
+    // Sort by rank (Squiggle returns rank field)
+    const sorted = [...data.standings].sort((a, b) => a.rank - b.rank);
+
+    // Map to our ladder format
+    return sorted.map(s => {
+      const ourName = SQUIGGLE_NAME_MAP[s.name] || s.name;
+      const teamInfo = AFL_TEAMS.find(t => t.name === ourName) || { emoji: "🏉" };
+      const wins = s.wins || 0;
+      const losses = s.losses || 0;
+      const draws = s.draws || 0;
+      const played = wins + losses + draws;
+      const pts = (wins * 4) + (draws * 2);
+      const pct = s.percentage ? parseFloat(s.percentage.toFixed(1)) : 0;
+      return {
+        name: ourName,
+        emoji: teamInfo.emoji,
+        wins, losses, draws, played, pts,
+        percentage: pct,
+      };
+    });
+  } catch(e) {
+    console.error("Squiggle fetch failed:", e.message);
+    return null;
+  }
+}
+
+// Map game round number in Sportfolio (1=after OR, 2=after R1...) to AFL round number
+// Sportfolio round 1 trading = after AFL Opening Round (round 1 in Squiggle for 2026)
+// Sportfolio round 2 trading = after AFL Round 1 = Squiggle round 2... etc
+function sportfolioRoundToAFLRound(sportfolioRound) {
+  return sportfolioRound; // 1:1 mapping — OR=round 1, R1=round 2, etc in AFL numbering
+}
+
+let squigglePoller = null;
+
+async function startSquigglePolling() {
+  if (squigglePoller) return; // Already running
+  console.log("Starting Squiggle live ladder polling...");
+
+  squigglePoller = setInterval(async () => {
+    try {
+      const gs = await loadState();
+      const deadline = gs.tradeDeadline ? new Date(gs.tradeDeadline).getTime() : null;
+      const isLocked = deadline && Date.now() > deadline;
+
+      // Only poll during lockout (round in progress)
+      if (!isLocked || gs.round >= TOTAL_ROUNDS) {
+        stopSquigglePolling();
+        return;
+      }
+
+      const aflRound = sportfolioRoundToAFLRound(gs.round);
+      const newLadder = await fetchSquiggleLadder(aflRound);
+      if (!newLadder) return;
+
+      // Check if ladder has actually changed
+      const oldOrder = gs.ladder.map(t => t.name).join(",");
+      const newOrder = newLadder.map(t => t.name).join(",");
+      const oldPcts  = gs.ladder.map(t => t.percentage).join(",");
+      const newPcts  = newLadder.map(t => t.percentage).join(",");
+
+      if (oldOrder === newOrder && oldPcts === newPcts) return; // No change
+
+      console.log(`Squiggle update: ladder changed for round ${aflRound}`);
+      gs.ladder = newLadder;
+      gs.liveUpdatedAt = new Date().toISOString();
+      await saveState(gs);
+    } catch(e) {
+      console.error("Squiggle poller error:", e.message);
+    }
+  }, 5 * 60 * 1000); // Every 5 minutes
+}
+
+function stopSquigglePolling() {
+  if (squigglePoller) {
+    clearInterval(squigglePoller);
+    squigglePoller = null;
+    console.log("Squiggle polling stopped.");
+  }
+}
+
 const PRICE_SCALE = {
   1:6.12, 2:5.56, 3:5.05, 4:4.59, 5:4.18,
   6:3.80, 7:3.45, 8:3.14, 9:2.85, 10:2.59,
@@ -793,8 +915,43 @@ app.post("/api/admin/deadline", async (req, res) => {
   gs.tradeDeadline = deadline; // ISO datetime string
   gs.status = "trading";
   await saveState(gs);
+  // Start Squiggle polling if deadline is within 1 hour or already passed
+  const dl = new Date(deadline).getTime();
+  if (dl - Date.now() < 60 * 60 * 1000) {
+    startSquigglePolling();
+  }
   res.json({ success: true, state: gs });
 });
+
+// Admin: manually trigger a Squiggle ladder fetch right now
+app.post("/api/admin/fetch-ladder", async (req, res) => {
+  const { playerName } = req.body;
+  if (playerName !== "Tyson") return res.status(403).json({ error: "Admin only" });
+  const gs = await loadState();
+  const aflRound = sportfolioRoundToAFLRound(gs.round);
+  const newLadder = await fetchSquiggleLadder(aflRound);
+  if (!newLadder) return res.status(502).json({ error: "Squiggle fetch failed — check server logs." });
+  gs.prevLadder = JSON.parse(JSON.stringify(gs.ladder));
+  gs.ladder = newLadder;
+  gs.liveUpdatedAt = new Date().toISOString();
+  await saveState(gs);
+  res.json({ success: true, state: gs });
+});
+
+// Public: get live update timestamp (so frontend knows when to refresh)
+app.get("/api/live-status", async (req, res) => {
+  const gs = await loadState();
+  const deadline = gs.tradeDeadline ? new Date(gs.tradeDeadline).getTime() : null;
+  const isLocked = deadline && Date.now() > deadline;
+  res.json({
+    round: gs.round,
+    isLocked,
+    liveUpdatedAt: gs.liveUpdatedAt || null,
+    pollingActive: !!squigglePoller,
+  });
+});
+
+
 
 // Admin: download backup
 app.get("/api/admin/backup", async (req, res) => {
@@ -854,10 +1011,22 @@ app.use(function(req, res) {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-initDb().then(() => {
+initDb().then(async () => {
   app.listen(PORT, "0.0.0.0", function() {
     console.log("Sportfolio AFL 2026 running on port " + PORT);
   });
+  // Resume Squiggle polling if we're already in a lockout period
+  try {
+    const gs = await loadState();
+    const deadline = gs.tradeDeadline ? new Date(gs.tradeDeadline).getTime() : null;
+    const isLocked = deadline && Date.now() > deadline;
+    if (isLocked && gs.round < TOTAL_ROUNDS) {
+      console.log("Resuming Squiggle polling (lockout already active)");
+      startSquigglePolling();
+    }
+  } catch(e) {
+    console.error("Failed to check polling state:", e.message);
+  }
 }).catch(err => {
   console.error("Failed to initialise database:", err);
   process.exit(1);
