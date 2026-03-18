@@ -569,6 +569,1410 @@ function getBrokerageFee(player) {
   return getTotal(player)*0.005*Math.pow(2,player.tradesThisRound);
 }
 function canSell(holding) {
+  const minHold = holding.buyRound===0?2:2;
+  return (gameState.round-holding.buyRound)>=minHold;
+}
+function roundsLeft(holding) {
+  const minHold = holding.buyRound===0?2:2;
+  return Math.max(0,minHold-(gameState.round-holding.buyRound));
+}
+function getRank(playerName) {
+  return [...ALL_PLAYERS].map(n=>({n,v:getTotal(gameState.players[n])})).sort((a,b)=>b.v-a.v).findIndex(p=>p.n===playerName)+1;
+}
+
+// ── API ───────────────────────────────────────────────────────
+async function api(path, method="GET", body=null) {
+  const opts = {method,headers:{"Content-Type":"application/json"}};
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(path,opts);
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error||"Request failed");
+  return data;
+}
+
+async function refreshState() {
+  try {
+    const data = await api("/api/state");
+    gameState = data;
+    renderAll();
+    document.getElementById("syncDot").style.background = "var(--up)";
+    // Show live update time if ladder was updated by Squiggle
+    if (data.liveUpdatedAt) {
+      const t = new Date(data.liveUpdatedAt);
+      const mins = Math.floor((Date.now() - t) / 60000);
+      document.getElementById("syncLabel").textContent = mins < 1 ? "Live · Just updated" : `Live · ${mins}m ago`;
+    } else {
+      document.getElementById("syncLabel").textContent = "Live";
+    }
+  } catch(e) {
+    document.getElementById("syncDot").style.background = "var(--down)";
+    document.getElementById("syncLabel").textContent = "Offline";
+  }
+}
+
+// ── LOGIN ─────────────────────────────────────────────────────
+async function initLogin() {
+  await refreshState();
+  const container = document.getElementById("loginButtons");
+  container.innerHTML = "";
+  HUMAN_PLAYERS.forEach(name => {
+    const p = gameState?.players[name];
+    const total = p ? getTotal(p) : 10000;
+    const btn = document.createElement("button");
+    btn.className = "player-btn";
+    btn.innerHTML = `<span style="font-size:1.2rem">👤</span><span>${name}</span><span class="pval">${fmt(total)}</span>`;
+    btn.onclick = () => login(name);
+    container.appendChild(btn);
+  });
+}
+
+function login(name) {
+  currentPlayer = name;
+  viewingPlayer = name;
+  document.getElementById("loginScreen").style.display = "none";
+  document.getElementById("gameScreen").style.display = "block";
+  if (name === "Tyson") {
+    document.getElementById("adminNavBtn").style.display = "";
+    document.getElementById("advanceBtn").style.display = "";
+    document.getElementById("backBtn").style.display = "";
+  }
+  renderAll();
+  syncInterval = setInterval(refreshState, 15000);
+}
+
+function logout() {
+  currentPlayer = null;
+  viewingPlayer = null;
+  clearInterval(syncInterval);
+  document.getElementById("gameScreen").style.display = "none";
+  document.getElementById("loginScreen").style.display = "flex";
+  initLogin();
+}
+
+// ── RENDER ────────────────────────────────────────────────────
+function renderAll() {
+  if (!gameState||!currentPlayer) return;
+  updateHeaderUI();
+  renderLadder();
+  renderPortfolio();
+  renderLeaderboard();
+  if (currentPlayer==="Tyson") renderAdmin();
+}
+
+function getRoundLabel(r) {
+  if (r === 0) return "PRE";
+  if (r === 1) return "R1";
+  if (r >= 10) return "R9";
+  return "R" + r;
+}
+function getRoundFullLabel(r) { return r===0?"Pre-Season":r===1?"After Opening Round":"After Round "+(r-1); }
+function getRoundName(r) { return r===1?"Round 1":r===10?"Round 9":"Round "+r; }
+function getNextRoundName(r) { return r===1?"Opening Round":"Round "+(r-1); }
+
+function updateHeaderUI() {
+  const gs = gameState;
+  document.getElementById("roundDisplay").textContent = getRoundLabel(gs.round);
+  document.getElementById("lbRoundLabel").textContent = getRoundFullLabel(gs.round);
+  document.getElementById("adminRoundNum").textContent = getNextRoundName(gs.round+1);
+  const isOpen = gs.round < 10;
+  const now = Date.now();
+  const deadline = gs.tradeDeadline ? new Date(gs.tradeDeadline).getTime() : null;
+  const isLocked = deadline && now > deadline;
+  const banner = document.getElementById("tradingBanner");
+  if (!isOpen) {
+    banner.className="banner closed";
+    banner.innerHTML='<div><span class="dot off"></span><strong>Season Complete</strong> — Final results locked.</div>';
+  } else if (gs.round===0) {
+    banner.className="banner open";
+    banner.innerHTML='<div><span class="dot live"></span><strong>Pre-Season Trading Open</strong> — Initial investments now accepted. 2-round hold applies.</div><div style="font-family:\'DM Mono\',monospace;font-size:.75rem;color:var(--muted)">Brokerage: 0.5% of portfolio</div>';
+  } else if (isLocked) {
+    banner.className="banner closed";
+    banner.innerHTML=`<div><span class="dot off"></span><strong>Trading Locked</strong> — ${getRoundName(gs.round)} is underway. All portfolios now visible.</div>`;
+  } else {
+    banner.className="banner open";
+    let deadlineHtml = "";
+    if (deadline) {
+      const mins = Math.max(0, Math.floor((deadline - now) / 60000));
+      const hrs = Math.floor(mins / 60);
+      const m = mins % 60;
+      const timeStr = hrs > 0 ? `${hrs}h ${m}m` : `${m}m`;
+      deadlineHtml = `<span style="font-family:'DM Mono',monospace;font-size:.72rem;color:var(--accent);margin-left:.75rem">⏱ ${timeStr} remaining</span>`;
+    } else {
+      deadlineHtml = `<span style="font-family:'DM Mono',monospace;font-size:.72rem;color:var(--muted);margin-left:.75rem">No deadline set</span>`;
+    }
+    banner.className="banner open";
+    banner.innerHTML=`<div><span class="dot live"></span><strong>${getRoundName(gs.round)} Complete — Trading Open</strong>${deadlineHtml}</div><div style="font-family:'DM Mono',monospace;font-size:.75rem;color:var(--muted)">Brokerage: 0.5% of portfolio · doubles each trade · Portfolios hidden until deadline</div>`;
+  }
+  const myP = gs.players[currentPlayer];
+  const myTotal = getTotal(myP);
+  const myChg = myTotal-10000;
+  document.getElementById("mPortfolio").textContent = fmt(myTotal);
+  document.getElementById("mPortfolio").style.color = myChg>=0?"var(--up)":"var(--down)";
+  document.getElementById("mPortfolioChg").textContent = `${fmtD(myChg)} (${fmtP(myChg/10000*100)})`;
+  document.getElementById("mPortfolioChg").style.color = myChg>=0?"var(--up)":"var(--down)";
+  document.getElementById("mCash").textContent = fmt(myP.cash);
+  document.getElementById("mRank").textContent = "#"+getRank(currentPlayer);
+  document.getElementById("mTrades").textContent = myP.tradesThisRound;
+  document.getElementById("mNextFee").textContent = "Next fee: "+fmt(getBrokerageFee(myP));
+
+  // Render holdings summary table on market tab
+  const holdingsCard = document.getElementById("myHoldingsCard");
+  const holdingsBody = document.getElementById("myHoldingsBody");
+  const holdingsTotal = document.getElementById("myHoldingsTotal");
+  if (myP.holdings.length === 0) {
+    holdingsCard.style.display = "none";
+  } else {
+    holdingsCard.style.display = "";
+    const invested = myP.holdings.reduce((s,h) => s + h.shares * getPrice(h.team), 0);
+    holdingsTotal.textContent = `Invested ${fmt(invested)} · Cash ${fmt(myP.cash)} · Total ${fmt(myTotal)}`;
+    holdingsBody.innerHTML = myP.holdings.map(h => {
+      const price = getPrice(h.team);
+      const val = h.shares * price;
+      const cost = h.shares * h.buyPrice;
+      const pnl = val - cost;
+      const pnlPct = cost > 0 ? pnl / cost * 100 : 0;
+      const cs = canSell(h);
+      const rl = roundsLeft(h);
+      const pnlColor = pnl >= 0 ? "var(--up)" : "var(--down)";
+      const emoji = gs.ladder.find(t => t.name === h.team)?.emoji || "";
+      return `<tr>
+        <td><span style="margin-right:.4rem">${emoji}</span>${h.team}</td>
+        <td style="text-align:right;font-family:'DM Mono',monospace;font-size:.78rem">${fmtS(h.shares)}</td>
+        <td style="text-align:right;font-family:'DM Mono',monospace;font-size:.78rem">$${price.toFixed(2)}</td>
+        <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:600">${fmt(val)}</td>
+        <td style="text-align:right;font-family:'DM Mono',monospace;font-size:.75rem;color:${pnlColor}" class="hide-mob">${fmtD(pnl)}<br><span style="font-size:.68rem">(${fmtP(pnlPct)})</span></td>
+        <td style="text-align:center" class="hide-mob">${cs ? '<span style="color:var(--up);font-size:.72rem">✓ Can sell</span>' : `<span class="hold-tag">HOLD ${rl}R</span>`}</td>
+      </tr>`;
+    }).join("") + `<tr style="border-top:1px solid var(--border)">
+        <td colspan="3" style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em">Cash</td>
+        <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:600;color:var(--blue)">${fmt(myP.cash)}</td>
+        <td class="hide-mob"></td><td class="hide-mob"></td>
+      </tr>
+      <tr style="border-top:2px solid var(--border)">
+        <td colspan="3" style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em">Total Portfolio</td>
+        <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:700;color:${myChg>=0?"var(--up)":"var(--down)"}">${fmt(myTotal)}</td>
+        <td class="hide-mob"></td><td class="hide-mob"></td>
+      </tr>`;
+  }
+
+  if (currentPlayer==="Tyson") {
+    const advBtn = document.getElementById("advanceBtn");
+    advBtn.disabled = gs.round>=10;
+    advBtn.textContent = gs.round>=10?"✓ Season Complete":"Advance Round →";
+  }
+}
+
+function renderLadder() {
+  const gs = gameState;
+  const tbody = document.getElementById("ladderBody");
+  tbody.innerHTML = "";
+  const myP = gs.players[currentPlayer];
+  const isOpen = gs.round<10;
+  const deadline = gs.tradeDeadline ? new Date(gs.tradeDeadline).getTime() : null;
+  const isLocked = deadline && Date.now() > deadline;
+  // During trading window, show snapshot holdings (end of last round); after lockout show live
+  const displayP = (!isLocked && gs.round > 0 && gs.snapshot) ? gs.snapshot[currentPlayer] : myP;
+
+  gs.ladder.forEach((team,idx) => {
+    const pos = idx+1;
+    const price = PRICE_SCALE[pos];
+    const prevPrice = gs.prevLadder ? getPrice(team.name,gs.prevLadder) : price;
+    const chg = price-prevPrice;
+    const myH = displayP.holdings ? displayP.holdings.find(h=>h.team===team.name) : myP.holdings.find(h=>h.team===team.name);
+    let posClass = pos<=4?"pos-top4":pos<=8?"pos-top8":pos===18?"pos-bot":"pos-mid";
+    let chgHtml = "<span style='color:var(--muted)'>—</span>";
+    if (gs.prevLadder) {
+      const color = chg>0.01?"var(--up)":chg<-0.01?"var(--down)":"var(--muted)";
+      const bg = chg>0.01?"rgba(0,201,122,.1)":chg<-0.01?"rgba(255,79,109,.1)":"var(--surface2)";
+      chgHtml = `<span style="font-family:'DM Mono',monospace;font-size:.72rem;padding:.18rem .45rem;border-radius:4px;background:${bg};color:${color}">${chg>0.01?`▲$${chg.toFixed(2)}`:chg<-0.01?`▼$${Math.abs(chg).toFixed(2)}`:"—"}</span>`;
+    }
+    const interestNote = pos<=4?`<span style="font-size:.58rem;color:var(--up);margin-left:.4rem">+${INTEREST_RATES[pos]*100}%/wk</span>`:pos===18?`<span style="font-size:.58rem;color:var(--down);margin-left:.4rem">-1%/wk</span>`:"";
+    const holdingHtml = myH?`<span style="font-family:'DM Mono',monospace;font-size:.72rem;color:var(--accent)">${fmt(myH.shares*price)}</span>`:`<span style="color:var(--dim);font-size:.72rem">—</span>`;
+
+    // Upcoming opponents
+    const fixtures = gs.fixtures || {};
+    let upcomingHtml = `<span style="color:var(--dim);font-size:.7rem">—</span>`;
+    if (Object.keys(fixtures).length > 0) {
+      const chips = [];
+      for (let r = gs.round+1; r <= 10 && chips.length < 3; r++) {
+        const roundFixtures = fixtures[r] || [];
+        const match = roundFixtures.find(f => f[0]===team.name||f[1]===team.name);
+        if (!match) {
+          chips.push(`<span class="opp-chip opp-bye" data-tip="Round ${r===1?'Opening Round':'R'+(r-1)} · Bye">B</span>`);
+        } else {
+          const isHome = match[0] === team.name;
+          const opp = isHome ? match[1] : match[0];
+          const oppData = gs.ladder.find(t=>t.name===opp);
+          const emoji = oppData ? oppData.emoji : "?";
+          const rLabel = r===1?"Opening Round":"R"+(r-1);
+          const haLabel = isHome ? "H" : "A";
+          const haColor = isHome ? "var(--up)" : "var(--muted)";
+          chips.push(`<span class="opp-chip" data-tip="${rLabel} · vs ${opp} (${isHome?'Home':'Away'})">${emoji}<span style="font-size:.55rem;font-family:'DM Mono',monospace;color:${haColor};margin-left:.08rem">${haLabel}</span></span>`);
+        }
+      }
+      upcomingHtml = chips.join("");
+    }
+
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><span class="pos-badge ${posClass}">${pos}</span></td>
+      <td><span style="margin-right:.4rem">${team.emoji}</span><strong>${team.name}</strong>${interestNote}</td>
+      <td class="hide-mob mono" style="color:var(--muted)">${gs.round>0?`${team.wins}–${team.losses}–${team.draws}`:"—"}</td>
+      <td class="hide-mob mono" style="color:var(--muted)">${gs.round>0?team.pts:"—"}</td>
+      <td class="hide-mob mono" style="color:var(--muted)">${gs.round>0?team.pct.toFixed(1)+"%":"—"}</td>
+      <td style="font-family:'DM Mono',monospace;font-weight:500;color:var(--accent)">$${price.toFixed(2)}</td>
+      <td>${chgHtml}</td>
+      <td>${holdingHtml}</td>
+      <td class="hide-mob">${upcomingHtml}</td>
+      <td><button class="buy-btn" onclick="openBuyModal('${team.name}')" ${!isOpen || isLocked?"disabled":""}>BUY</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function renderPortfolio() {
+  const gs = gameState;
+  const deadline = gs.tradeDeadline ? new Date(gs.tradeDeadline).getTime() : null;
+  const isLocked = deadline && Date.now() > deadline;
+  const useSnapshot = !isLocked && gs.round > 0 && gs.snapshot;
+  // Player tabs
+  const tabs = document.getElementById("playerTabs");
+  tabs.innerHTML = "";
+  ALL_PLAYERS.forEach(name => {
+    const isH = HUMAN_PLAYERS.includes(name);
+    const btn = document.createElement("button");
+    btn.className = `player-tab ${isH?"":"ai"} ${name===viewingPlayer?"active":""}`;
+    btn.innerHTML = `${isH?"👤":"🤖"} ${name}`;
+    btn.onclick = ()=>{viewingPlayer=name;renderPortfolio();};
+    tabs.appendChild(btn);
+  });
+
+  const isViewingSelf = viewingPlayer === currentPlayer;
+  const liveP = gs.players[viewingPlayer];
+  // During trading window, show snapshot for other players; always show live for yourself
+  const snapP = useSnapshot && !isViewingSelf && gs.snapshot && gs.snapshot[viewingPlayer];
+  const vP = snapP ? {
+    ...liveP,
+    cash: snapP.cash,
+    holdings: snapP.holdings,
+    tradesThisRound: 0
+  } : liveP;
+  const vTotal = snapP ? snapP.total : getTotal(liveP);
+  const vChg = vTotal-10000;
+  const canAct = isViewingSelf && gs.round<10 && !(deadline && Date.now()>deadline);
+  const isOpen = gs.round<10;
+  const hiddenBanner = (useSnapshot && !isViewingSelf) ? `<div class="banner closed" style="margin-bottom:1rem"><div><span class="dot off"></span>Showing <strong>${viewingPlayer}'s</strong> portfolio as at end of last round. Live trades hidden until deadline.</div></div>` : "";
+
+  const content = document.getElementById("portfolioContent");
+  content.innerHTML = `
+    ${hiddenBanner}
+    <div class="stats-row">
+      <div class="stat-card"><div class="stat-label">Total Portfolio</div><div class="stat-val" style="color:${vChg>=0?"var(--up)":"var(--down)"}">${fmt(vTotal)}</div><div class="stat-sub" style="color:${vChg>=0?"var(--up)":"var(--down)"}">${fmtD(vChg)} (${fmtP(vChg/10000*100)})</div></div>
+      <div class="stat-card"><div class="stat-label">Cash</div><div class="stat-val" style="color:var(--blue)">${fmt(vP.cash)}</div></div>
+      <div class="stat-card"><div class="stat-label">Trades This Round</div><div class="stat-val">${vP.tradesThisRound}</div><div class="stat-sub" style="color:var(--muted)">Next fee: ${fmt(getBrokerageFee(vP))}</div></div>
+      <div class="stat-card"><div class="stat-label">Rank</div><div class="stat-val">#${getRank(viewingPlayer)}</div></div>
+    </div>
+    <div class="two-col">
+      <div>
+        <div class="card" style="margin-bottom:1rem">
+          <div class="card-hd"><div class="card-title">Portfolio Breakdown</div></div>
+          <div class="card-body" style="display:flex;align-items:center;gap:1.5rem;flex-wrap:wrap">
+            <div id="pieChartWrap" style="flex-shrink:0;width:160px;height:160px"></div>
+            <div id="pieLegend" style="font-size:.75rem;line-height:1.9;flex:1;min-width:120px"></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-hd"><div class="card-title">Holdings</div></div>
+          <div class="card-body">
+            ${vP.holdings.length===0?`<div class="empty-state"><div class="empty-icon">📊</div>No holdings yet.</div>`:
+              vP.holdings.map(h=>{
+                const price = getPrice(h.team);
+                const val = h.shares*price;
+                const pnl = val-(h.shares*h.buyPrice);
+                const pnlPct = pnl/(h.shares*h.buyPrice)*100;
+                const cs = canSell(h);
+                const rl = roundsLeft(h);
+                return `
+                  <div class="holding">
+                    <div>
+                      <div style="font-weight:600;font-size:.88rem">${h.team}</div>
+                      <div style="font-size:.68rem;color:var(--muted);font-family:'DM Mono',monospace;margin-top:.1rem">${fmtS(h.shares)} shares · bought $${h.buyPrice.toFixed(2)} · now $${price.toFixed(2)}</div>
+                    </div>
+                    <div>${!cs?`<span class="hold-tag">HOLD ${rl}R</span>`:""}</div>
+                    <div style="text-align:right;font-family:'DM Mono',monospace">
+                      <div style="font-size:.9rem">${fmt(val)}</div>
+                      <div style="font-size:.7rem;color:${pnl>=0?"var(--up)":"var(--down)"}">${fmtD(pnl)} (${fmtP(pnlPct)})</div>
+                    </div>
+                    ${canAct?`<button class="sell-btn" onclick="openSellModal('${h.team}')" ${!cs||!isOpen?"disabled":""}>${cs?"SELL":"HOLD"}</button>`:"<div></div>"}
+                  </div>`;
+              }).join("")}
+            <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.75rem 1rem;display:flex;justify-content:space-between;align-items:center;margin-top:.5rem">
+              <span style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em">Cash</span>
+              <span style="font-family:'DM Mono',monospace;color:var(--blue)">${fmt(vP.cash)}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-hd"><div class="card-title">Trade Log</div></div>
+        <div class="card-body">
+          ${(()=>{
+            if(vP.tradeLog.length===0) return '<div class="empty-state"><div class="empty-icon">📋</div>No trades yet.</div>';
+            return [...vP.tradeLog].reverse().slice(0,20).map(t=>{
+              const canUndo = t.id && t.round===gameState.round && vP.name===currentPlayer;
+              const undoHtml = canUndo ? '<button class="btn sm danger" style="margin-top:.3rem;font-size:.62rem;padding:.2rem .5rem" onclick="undoTrade(\''+t.id+'\')">↩ Undo</button>' : '';
+              return '<div class="tlog-item"><div><span class="tlog-type '+(t.type==="buy"?"tlog-buy":"tlog-sell")+'">'+ t.type.toUpperCase()+'</span>'+t.team+'</div><div style="text-align:right;font-family:DM Mono,monospace"><div>'+fmt(t.value)+'</div><div style="font-size:.68rem;color:var(--muted)">'+getRoundLabel(t.round)+' · Fee '+fmt(t.fee)+'</div>'+undoHtml+'</div></div>';
+            }).join('');
+          })()}
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Draw pie chart after DOM updates
+  setTimeout(() => drawPieChart(vP, vTotal), 50);
+}
+
+function drawPieChart(vP, vTotal) {
+  const wrap = document.getElementById("pieChartWrap");
+  if (!wrap) return;
+  wrap.innerHTML = "";
+  const canvas = document.createElement("canvas");
+  canvas.width = 160; canvas.height = 160;
+  wrap.appendChild(canvas);
+  const ctx = canvas.getContext("2d");
+  const cx = 80, cy = 80, r = 72;
+
+  // Build slices
+  const slices = [];
+  const TEAM_COLORS = ["#FFB400","#4da6ff","#00c97a","#ff4f6d","#a78bfa","#f97316","#06b6d4","#ec4899","#84cc16","#f59e0b","#10b981","#3b82f6","#ef4444","#8b5cf6","#14b8a6","#f43f5e","#22c55e","#6366f1"];
+  vP.holdings.forEach((h, i) => {
+    const price = getPrice(h.team);
+    const val = h.shares * price;
+    slices.push({ label: h.team, val, color: TEAM_COLORS[i % TEAM_COLORS.length] });
+  });
+  if (vP.cash > 0) slices.push({ label: "Cash", val: vP.cash, color: "#4da6ff" });
+
+  if (slices.length === 0) return;
+
+  ctx.clearRect(0, 0, 160, 160);
+  let startAngle = -Math.PI / 2;
+  slices.forEach(s => {
+    const sweep = (s.val / vTotal) * 2 * Math.PI;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, r, startAngle, startAngle + sweep);
+    ctx.closePath();
+    ctx.fillStyle = s.color;
+    ctx.fill();
+    ctx.strokeStyle = "#080b12";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    startAngle += sweep;
+  });
+
+  // Legend
+  const legend = document.getElementById("pieLegend");
+  if (legend) {
+    legend.innerHTML = slices.map(s => `
+      <div style="display:flex;align-items:center;gap:.4rem">
+        <span style="width:9px;height:9px;border-radius:2px;background:${s.color};display:inline-block;flex-shrink:0"></span>
+        <span style="color:var(--muted)">${s.label}</span>
+        <span style="margin-left:auto;font-family:'DM Mono',monospace;color:var(--text)">${Math.round(s.val/vTotal*100)}%</span>
+      </div>`).join("");
+  }
+}
+
+function renderLeaderboard() {
+  const gs = gameState;
+  const deadline = gs.tradeDeadline ? new Date(gs.tradeDeadline).getTime() : null;
+  const isLocked = deadline && Date.now() > deadline;
+  const useSnapshot = !isLocked && gs.round > 0 && gs.snapshot;
+  const getVal = (name) => (useSnapshot && gs.snapshot && gs.snapshot[name]) ? gs.snapshot[name].total : getTotal(gs.players[name]);
+  const ranked = ALL_PLAYERS.map(n=>({name:n,val:getVal(n),isH:HUMAN_PLAYERS.includes(n)})).sort((a,b)=>b.val-a.val);
+  const list = document.getElementById("lbList");
+  list.innerHTML = "";
+  ranked.forEach((p,i)=>{
+    const rank = i+1;
+    const chg = p.val-10000;
+    const rankColor = rank===1?"var(--accent)":rank===2?"#b0bec5":rank===3?"#cd8c4a":"var(--dim)";
+    const isMe = p.name===currentPlayer;
+    const div = document.createElement("div");
+    div.className = `lb-row ${isMe?"me":""}`;
+    div.innerHTML = `
+      <div class="rank-n" style="color:${rankColor}">${rank}</div>
+      <div>
+        <span style="font-weight:600;font-size:.88rem">${p.name}</span>
+        ${isMe?`<span style="font-size:.58rem;color:var(--accent);background:rgba(255,180,0,.1);padding:.1rem .35rem;border-radius:3px;margin-left:.4rem;font-family:'DM Mono',monospace">YOU</span>`:""}
+        ${!p.isH?`<span style="font-size:.58rem;color:var(--muted);background:var(--surface2);padding:.1rem .35rem;border-radius:3px;margin-left:.4rem;font-family:'DM Mono',monospace">AI</span>`:""}
+      </div>
+      <div style="font-family:'DM Mono',monospace;font-size:.88rem;text-align:right">${fmt(p.val)}</div>
+      <div style="font-family:'DM Mono',monospace;font-size:.78rem;color:${chg>=0?"var(--up)":"var(--down)"};text-align:right">${fmtP(chg/10000*100)}</div>
+    `;
+    div.onclick = ()=>{viewingPlayer=p.name;showTab("portfolio",document.querySelectorAll("nav button")[1]);};
+    list.appendChild(div);
+  });
+
+  // Top movers
+  const movEl = document.getElementById("topMovers");
+  if (!gs.prevLadder) { movEl.innerHTML=`<div class="empty-state"><div class="empty-icon">📊</div>Advance to Round 1.</div>`; }
+  else {
+    const movers = gs.ladder.map((t,i)=>({name:t.name,emoji:t.emoji,chg:(gs.prevLadder.findIndex(p=>p.name===t.name))-i,pos:i+1})).sort((a,b)=>Math.abs(b.chg)-Math.abs(a.chg)).slice(0,6);
+    movEl.innerHTML = movers.map(m=>`
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:.4rem 0;border-bottom:1px solid rgba(30,45,69,.3);font-size:.82rem">
+        <div>${m.emoji} ${m.name}</div>
+        <div style="display:flex;gap:.75rem;align-items:center">
+          <span style="font-family:'DM Mono',monospace;font-size:.75rem;color:${m.chg>0?"var(--up)":m.chg<0?"var(--down)":"var(--muted)"}">${m.chg>0?"▲":"▼"} ${Math.abs(m.chg)} places</span>
+          <span style="font-family:'DM Mono',monospace;color:var(--accent);font-size:.75rem">$${PRICE_SCALE[m.pos].toFixed(2)}</span>
+        </div>
+      </div>`).join("");
+  }
+
+  // Round summary
+  const sumEl = document.getElementById("roundSummary");
+  const leader = ranked[0], last = ranked[ranked.length-1];
+  sumEl.innerHTML = `
+    <div style="font-size:.82rem;line-height:1.8">
+      <div><strong style="color:var(--accent)">🥇 Leader:</strong> ${leader.name} — ${fmt(leader.val)}</div>
+      <div><strong style="color:var(--muted)">Last:</strong> ${last.name} — ${fmt(last.val)}</div>
+      <div style="margin-top:.4rem;color:var(--muted)">Gap: ${fmt(leader.val-last.val)}</div>
+      <div style="margin-top:.4rem;font-size:.72rem;color:var(--muted)">Last synced: ${new Date(gs.lastUpdated).toLocaleTimeString()}</div>
+    </div>
+    <button class="btn sm" style="margin-top:.75rem;width:100%" onclick="refreshState()">🔄 Refresh</button>`;
+}
+
+function renderAdmin() {
+  loadResearchLog();
+  updateSquiggleStatus();
+  const gs = gameState;
+  const inputs = document.getElementById("adminInputs");
+  inputs.innerHTML = "";
+  gs.ladder.forEach(team=>{
+    const div = document.createElement("div");
+    div.className = "admin-row";
+    div.innerHTML = `
+      <div style="min-width:130px">${team.emoji} <strong>${team.name}</strong></div>
+      <div style="display:flex;align-items:center;gap:.35rem;flex-wrap:wrap">
+        <span style="font-size:.65rem;color:var(--muted)">W</span><input class="admin-input" id="w_${team.name.replace(/ /g,'_')}" type="number" min="0" value="${team.wins}">
+        <span style="font-size:.65rem;color:var(--muted)">L</span><input class="admin-input" id="l_${team.name.replace(/ /g,'_')}" type="number" min="0" value="${team.losses}">
+        <span style="font-size:.65rem;color:var(--muted)">D</span><input class="admin-input" id="d_${team.name.replace(/ /g,'_')}" type="number" min="0" value="${team.draws}">
+        <span style="font-size:.65rem;color:var(--muted)">%</span><input class="admin-input pct" id="p_${team.name.replace(/ /g,'_')}" type="number" min="0" step="0.1" value="${team.pct.toFixed(1)}">
+      </div>
+    `;
+    inputs.appendChild(div);
+  });
+
+  // Populate deadline input
+  const dlDateInput = document.getElementById("deadlineDateInput");
+  const dlTimeInput = document.getElementById("deadlineTimeInput");
+  const dlStatus = document.getElementById("deadlineStatus");
+  if (dlDateInput && dlTimeInput) {
+    if (gs.tradeDeadline) {
+      const d = new Date(gs.tradeDeadline);
+      const local = new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString();
+      dlDateInput.value = local.slice(0,10);
+      dlTimeInput.value = local.slice(11,16);
+      const isLocked = Date.now() > d.getTime();
+      dlStatus.textContent = isLocked ? "🔒 Trading locked" : "⏱ Trading open until " + d.toLocaleString();
+      dlStatus.style.color = isLocked ? "var(--down)" : "var(--up)";
+    } else {
+      dlStatus.textContent = "No deadline set — trading open indefinitely";
+      dlStatus.style.color = "var(--muted)";
+    }
+  }
+
+  const standings = document.getElementById("adminStandings");
+  const ranked = ALL_PLAYERS.map(n=>({name:n,val:getTotal(gs.players[n])})).sort((a,b)=>b.val-a.val);
+  standings.innerHTML = ranked.map((p,i)=>`
+    <div style="display:flex;justify-content:space-between;font-size:.8rem;margin-bottom:.4rem">
+      <span style="color:var(--muted)">${i+1}. ${p.name}</span>
+      <span class="mono">${fmt(p.val)}</span>
+    </div>`).join("");
+
+  // Fixtures - only build if not already present
+  const fixtureEl = document.getElementById("fixtureInputs");
+  if (fixtureEl.children.length === 0) {
+  const teamNames = gs.ladder.map(t=>t.name);
+  const teamOptions = `<option value="">— bye —</option>`+teamNames.map(n=>`<option value="${n}">${n}</option>`).join("");
+  const fixtures = gs.fixtures || {};
+  const ROUND_LABELS = ["Opening Round","Round 1","Round 2","Round 3","Round 4","Round 5","Round 6","Round 7","Round 8","Round 9"];
+  for (let r=1; r<=10; r++) {
+    const rLabel = ROUND_LABELS[r-1];
+    const header = document.createElement("div");
+    header.style.cssText = "font-family:'Bebas Neue',sans-serif;font-size:.8rem;letter-spacing:.1em;color:var(--accent);margin:1rem 0 .4rem";
+    header.textContent = rLabel;
+    fixtureEl.appendChild(header);
+    const roundFixtures = fixtures[r] || Array(9).fill(null).map(()=>["",""]);
+    for (let m=0; m<9; m++) {
+      const pair = roundFixtures[m] || ["",""];
+      const row = document.createElement("div");
+      row.style.cssText = "display:flex;align-items:center;gap:.5rem;margin-bottom:.3rem";
+      row.innerHTML = `
+        <span style="font-size:.65rem;color:var(--muted);width:20px;text-align:right">${m+1}.</span>
+        <select class="fix-select" id="fix_${r}_${m}_0">${teamOptions}</select>
+        <span style="font-size:.7rem;color:var(--muted)">vs</span>
+        <select class="fix-select" id="fix_${r}_${m}_1">${teamOptions}</select>
+      `;
+      fixtureEl.appendChild(row);
+      if (pair[0]) document.querySelector(`#fix_${r}_${m}_0`)?.setAttribute("data-val", pair[0]);
+      if (pair[1]) document.querySelector(`#fix_${r}_${m}_1`)?.setAttribute("data-val", pair[1]);
+    }
+  }
+  // Set saved values after DOM is ready
+  setTimeout(()=>{
+    for (let r=1; r<=10; r++) {
+      const roundFixtures = fixtures[r] || [];
+      for (let m=0; m<9; m++) {
+        const pair = roundFixtures[m] || ["",""];
+        const s0 = document.getElementById(`fix_${r}_${m}_0`);
+        const s1 = document.getElementById(`fix_${r}_${m}_1`);
+        if (s0 && pair[0]) s0.value = pair[0];
+        if (s1 && pair[1]) s1.value = pair[1];
+      }
+    }
+  }, 50);
+  } // end if fixtureEl.children.length === 0
+}
+
+// ── ADMIN ACTIONS ────────────────────────────────────────────
+function downloadBackup() {
+  window.location.href = `/api/admin/backup?playerName=Tyson`;
+}
+
+async function restoreBackup(input) {
+  const file = input.files[0];
+  if (!file) return;
+  if (!confirm(`Restore from "${file.name}"? This will overwrite the current game state.`)) {
+    input.value = "";
+    return;
+  }
+  try {
+    const text = await file.text();
+    const state = JSON.parse(text);
+    const data = await api("/api/admin/restore", "POST", { playerName: "Tyson", state });
+    gameState = data.state;
+    renderAll();
+    showToast("success", "Restored", `Game state restored from backup successfully.`);
+  } catch(e) {
+    showToast("error", "Restore failed", e.message);
+  }
+  input.value = "";
+}
+
+async function fetchLiveLadder() {
+  const btn = event.target;
+  btn.disabled = true;
+  btn.textContent = "Fetching...";
+  try {
+    const data = await api("/api/admin/fetch-ladder", "POST", { playerName: "Tyson" });
+    gameState = data.state;
+    renderAll();
+    updateSquiggleStatus();
+    showToast("success", "Ladder updated", "Live ladder fetched from Squiggle.");
+  } catch(e) {
+    showToast("error", "Fetch failed", e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "⚡ Fetch Now";
+  }
+}
+
+function updateSquiggleStatus() {
+  const el = document.getElementById("squiggleStatus");
+  if (!el) return;
+  const gs = gameState;
+  const deadline = gs.tradeDeadline ? new Date(gs.tradeDeadline).getTime() : null;
+  const isLocked = deadline && Date.now() > deadline;
+  if (gs.liveUpdatedAt) {
+    const t = new Date(gs.liveUpdatedAt);
+    el.textContent = `Last fetched: ${t.toLocaleTimeString()} · ${isLocked ? "Auto-polling active" : "Polling paused (trading open)"}`;
+    el.style.color = isLocked ? "var(--up)" : "var(--muted)";
+  } else {
+    el.textContent = isLocked ? "Auto-polling active — no update yet this round." : "Polling will start automatically when lockout begins.";
+  }
+}
+
+async function decrementRound() {
+  if (!confirm(`Roll back from Round ${gameState.round} to Round ${gameState.round - 1}? Portfolios and AI trades will NOT be reversed — only the round counter.`)) return;
+  try {
+    const data = await api("/api/admin/decrement-round", "POST", { playerName: "Tyson" });
+    gameState = data.state;
+    renderAll();
+    showToast("success", "Round decremented", `Now on Round ${gameState.round} with trading open.`);
+  } catch(e) { showToast("error", "Failed", e.message); }
+}
+
+async function triggerAIPreseason() {
+  if (!confirm("Run AI pre-season trades? This will take 15-30 seconds and should only be done once.")) return;
+  showToast("success", "AI Researching...", "Pre-season trades in progress. Please wait.");
+  try {
+    const data = await api("/api/admin/ai-preseason", "POST", { playerName: "Tyson" });
+    gameState = data.state;
+    renderAll();
+    loadResearchLog();
+    showToast("success", "Done", "AI pre-season trades complete.");
+  } catch(e) { showToast("error", "Failed", e.message); }
+}
+
+async function loadResearchLog() {
+  try {
+    const data = await api("/api/admin/research");
+    const el = document.getElementById("researchLog");
+    if (!el) return;
+    if (!data.log || data.log.length === 0) {
+      el.innerHTML = '<div class="empty-state"><div class="empty-icon">🔬</div>No AI research yet.</div>';
+      return;
+    }
+    el.innerHTML = [...data.log].reverse().map(entry => `
+      <div style="margin-bottom:1.25rem;padding-bottom:1.25rem;border-bottom:1px solid var(--border)">
+        <div style="font-family:'Bebas Neue',sans-serif;font-size:.78rem;letter-spacing:.1em;color:var(--accent);margin-bottom:.4rem">${getRoundLabel(entry.round)} — Research</div>
+        <div style="font-size:.75rem;color:var(--muted);margin-bottom:.75rem;line-height:1.6">${entry.research}</div>
+        ${AI_PLAYERS.map(name => entry.reasoning[name] ? `
+          <div style="display:flex;gap:.5rem;margin-bottom:.35rem;font-size:.73rem">
+            <span style="color:var(--text);font-weight:600;min-width:52px">${name}</span>
+            <span style="color:var(--muted)">${entry.reasoning[name]}</span>
+          </div>` : "").join("")}
+      </div>`).join("");
+  } catch(e) { console.error("Research log error:", e); }
+}
+
+async function saveDeadline() {
+  const dateVal = document.getElementById("deadlineDateInput").value;
+  const timeVal = document.getElementById("deadlineTimeInput").value;
+  if (!dateVal || !timeVal) { showToast("error","No deadline","Please pick both a date and time."); return; }
+  const isoStr = new Date(dateVal + "T" + timeVal).toISOString();
+  try {
+    const data = await api("/api/admin/deadline","POST",{playerName:"Tyson",deadline:isoStr});
+    gameState = data.state;
+    renderAll();
+    showToast("success","Deadline set","Trading will lock automatically at the set time.");
+  } catch(e) { showToast("error","Failed",e.message); }
+}
+
+async function undoTrade(tradeId) {
+  if (!confirm("Undo this trade? Your shares and fees will be fully reversed.")) return;
+  try {
+    const data = await api("/api/undo","POST",{playerName:currentPlayer, tradeId});
+    gameState = data.state;
+    renderAll();
+    showToast("success","Trade undone","Shares and fees have been reversed.");
+  } catch(e) { showToast("error","Undo failed",e.message); }
+}
+
+async function saveFixtures() {
+  const fixtures = {};
+  for (let r=1; r<=10; r++) {
+    fixtures[r] = [];
+    for (let m=0; m<9; m++) {
+      const t0 = document.getElementById(`fix_${r}_${m}_0`)?.value||"";
+      const t1 = document.getElementById(`fix_${r}_${m}_1`)?.value||"";
+      fixtures[r].push([t0,t1]);
+    }
+  }
+  try {
+    const data = await api("/api/admin/fixtures","POST",{playerName:"Tyson",fixtures});
+    gameState = data.state;
+    renderAll();
+    showToast("success","Fixtures saved","Upcoming opponents now visible on the ladder");
+  } catch(e) { showToast("error","Save failed",e.message); }
+}
+
+async function applyLadderUpdate() {
+  const updates = gameState.ladder.map(team => {
+    const k = team.name.replace(/ /g,"_");
+    return {
+      name: team.name,
+      wins: document.getElementById(`w_${k}`)?.value||team.wins,
+      losses: document.getElementById(`l_${k}`)?.value||team.losses,
+      draws: document.getElementById(`d_${k}`)?.value||team.draws,
+      pct: document.getElementById(`p_${k}`)?.value||team.pct
+    };
+  });
+  try {
+    const data = await api("/api/admin/ladder","POST",{playerName:"Tyson",updates});
+    gameState = data.state;
+    renderAll();
+    showToast("success","Ladder updated","Prices recalculated for all players");
+  } catch(e) { showToast("error","Update failed",e.message); }
+}
+
+async function advanceRound() {
+  try {
+    const data = await api("/api/admin/advance","POST",{playerName:"Tyson"});
+    gameState = data.state;
+    renderAll();
+    showToast("success",`Round ${gameState.round} locked in`,"Trading window now open");
+  } catch(e) { showToast("error","Failed to advance",e.message); }
+}
+
+async function backRound() {
+  if (gameState.round <= 0) { showToast("error","Can't go back","Already at pre-season."); return; }
+  if (!confirm(`Go back from Round ${gameState.round} to Round ${gameState.round - 1}? This will undo the last round advance including AI trades.`)) return;
+  try {
+    const data = await api("/api/admin/back","POST",{playerName:"Tyson"});
+    gameState = data.state;
+    renderAll();
+    showToast("success","Went back one round","Round reverted successfully.");
+  } catch(e) { showToast("error","Failed",e.message); }
+}
+
+function confirmReset() {
+  if (confirm("⚠ Reset the entire game back to the start? This cannot be undone.")) {
+    api("/api/admin/reset","POST",{playerName:"Tyson",confirm:"RESET"})
+      .then(data=>{gameState=data.state;renderAll();showToast("success","Game reset","Starting fresh");})
+      .catch(e=>showToast("error","Reset failed",e.message));
+  }
+}
+
+// ── BUY MODAL ────────────────────────────────────────────────
+function openBuyModal(teamName) {
+  activeBuyTeam = teamName;
+  const myP = gameState.players[currentPlayer];
+  const price = getPrice(teamName);
+  document.getElementById("buyTeam").textContent = teamName;
+  document.getElementById("buyingAs").textContent = currentPlayer;
+  document.getElementById("buyPriceDisplay").textContent = `$${price.toFixed(2)}`;
+  document.getElementById("buyCashDisplay").textContent = fmt(myP.cash);
+  document.getElementById("buyAmtInput").value = "";
+  document.getElementById("buyWarnEl").style.display = "none";
+  document.getElementById("buyConfirmBtn").disabled = false;
+  updateBuySummary();
+  document.getElementById("buyOverlay").classList.add("open");
+  setTimeout(()=>document.getElementById("buyAmtInput").focus(),100);
+}
+
+function updateBuySummary() {
+  const amt = parseFloat(document.getElementById("buyAmtInput").value)||0;
+  const myP = gameState.players[currentPlayer];
+  const price = getPrice(activeBuyTeam);
+  const fee = getBrokerageFee(myP);
+  const shares = amt>0?Math.floor(amt/price):0;
+  const total = amt+fee;
+  const remaining = myP.cash-total;
+  const maxInvest = getTotal(myP)*PORTFOLIO_CAP;
+  const existing = myP.holdings.find(h=>h.team===activeBuyTeam);
+  const existingVal = existing?existing.shares*price:0;
+
+  document.getElementById("bShares").textContent = shares>0?shares.toLocaleString():"—";
+  document.getElementById("bFee").textContent = fmt(fee);
+  document.getElementById("bTotal").textContent = amt>0?fmt(total):"—";
+  document.getElementById("bRemain").textContent = amt>0?fmt(remaining):"—";
+
+  const warn = document.getElementById("buyWarnEl");
+  warn.style.display="none";
+  document.getElementById("buyConfirmBtn").disabled = amt<=0;
+
+  if (amt>0) {
+    if (total>myP.cash){warn.style.display="block";warn.textContent=`Need ${fmt(total)}, have ${fmt(myP.cash)}`;document.getElementById("buyConfirmBtn").disabled=true;}
+    else if (existingVal+amt>maxInvest){warn.style.display="block";warn.textContent=`25% cap: max ${fmt(maxInvest-existingVal)} more in this team`;document.getElementById("buyConfirmBtn").disabled=true;}
+  }
+}
+
+async function submitBuy() {
+  const amount = parseFloat(document.getElementById("buyAmtInput").value);
+  if (!amount||amount<=0) return;
+  document.getElementById("buyConfirmBtn").disabled = true;
+  try {
+    const data = await api("/api/buy","POST",{playerName:currentPlayer,teamName:activeBuyTeam,amount});
+    gameState = data.state;
+    closeBuyModal();
+    renderAll();
+    showToast("success","Buy confirmed",`${Math.floor(data.shares).toLocaleString()} shares in ${activeBuyTeam} for ${fmt(data.cost)}`);
+  } catch(e) {
+    console.error("Buy error:", e, e.stack);
+    showToast("error","Trade failed",e.message);
+    document.getElementById("buyConfirmBtn").disabled=false;
+  }
+}
+
+function closeBuyModal() { document.getElementById("buyOverlay").classList.remove("open"); }
+
+// ── SELL MODAL ───────────────────────────────────────────────
+function openSellModal(teamName) {
+  activeSellTeam = teamName;
+  const myP = gameState.players[currentPlayer];
+  const h = myP.holdings.find(hh=>hh.team===teamName);
+  const price = getPrice(teamName);
+  document.getElementById("sellTeam").textContent = teamName;
+  document.getElementById("sellPriceDisplay").textContent = `$${price.toFixed(2)}`;
+  document.getElementById("sellSharesDisplay").textContent = h?fmtS(h.shares):"0";
+  document.getElementById("sellAmtInput").value = h?Math.round(h.shares):"";
+  document.getElementById("sellHoldWarn").style.display="none";
+  document.getElementById("sellWarnEl").style.display="none";
+  document.getElementById("sellConfirmBtn").disabled=false;
+  if (h&&!canSell(h)){
+    document.getElementById("sellHoldWarn").style.display="block";
+    document.getElementById("sellHoldWarn").textContent=`Hold period not met — ${roundsLeft(h)} more round(s) required.`;
+    document.getElementById("sellConfirmBtn").disabled=true;
+  }
+  updateSellSummary();
+  document.getElementById("sellOverlay").classList.add("open");
+}
+
+function updateSellSummary() {
+  const myP = gameState.players[currentPlayer];
+  const h = myP.holdings.find(hh=>hh.team===activeSellTeam);
+  if (!h) return;
+  const shares = parseFloat(document.getElementById("sellAmtInput").value)||0;
+  const price = getPrice(activeSellTeam);
+  const fee = getBrokerageFee(myP);
+  document.getElementById("sValue").textContent = shares>0?fmt(shares*price):"—";
+  document.getElementById("sFee").textContent = fmt(fee);
+  document.getElementById("sNet").textContent = shares>0?fmt(shares*price-fee):"—";
+}
+
+async function submitSell() {
+  const shares = parseFloat(document.getElementById("sellAmtInput").value);
+  if (!shares||shares<=0) return;
+  document.getElementById("sellConfirmBtn").disabled=true;
+  try {
+    const data = await api("/api/sell","POST",{playerName:currentPlayer,teamName:activeSellTeam,shares});
+    gameState = data.state;
+    closeSellModal();
+    renderAll();
+    showToast("success","Sell confirmed",`Net proceeds: ${fmt(data.net)}`);
+  } catch(e) {
+    showToast("error","Trade failed",e.message);
+    document.getElementById("sellConfirmBtn").disabled=false;
+  }
+}
+
+function closeSellModal() { document.getElementById("sellOverlay").classList.remove("open"); }
+
+// ── MODAL CLICK-OUTSIDE ──────────────────────────────────────
+document.querySelectorAll(".overlay").forEach(o=>o.addEventListener("click",e=>{if(e.target===o){o.classList.remove("open");}}));
+
+// ── NAV ──────────────────────────────────────────────────────
+function showTab(name, btn) {
+  document.querySelectorAll(".page").forEach(p=>p.classList.remove("active"));
+  document.querySelectorAll("nav button").forEach(b=>b.classList.remove("active"));
+  document.getElementById("tab-"+name).classList.add("active");
+  if (btn) btn.classList.add("active");
+  else document.querySelectorAll("nav button")[["market","portfolio","leaderboard","admin"].indexOf(name)]?.classList.add("active");
+}
+
+// ── TOAST ────────────────────────────────────────────────────
+function showToast(type, title, msg) {
+  const el = document.getElementById("toast");
+  document.getElementById("toastTitle").textContent = title;
+  document.getElementById("toastTitle").className = "toast-title "+type;
+  document.getElementById("toastMsg").textContent = msg;
+  el.className = "show "+type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>el.className="",3500);
+}
+
+// ── INIT ─────────────────────────────────────────────────────
+initLogin();
+</script>
+</body>
+</html>.stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:1.25rem}
+
+/* CARDS */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:1.1rem}
+.card-hd{padding:.8rem 1.1rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.card-title{font-family:'Bebas Neue',sans-serif;font-size:.95rem;letter-spacing:.08em}
+.card-body{padding:1.1rem}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:1rem 1.1rem}
+.stat-label{font-size:.62rem;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);margin-bottom:.3rem}
+.stat-val{font-family:'DM Mono',monospace;font-size:1.35rem}
+.stat-sub{font-size:.72rem;margin-top:.15rem}
+
+/* TABLE */
+.tbl{width:100%;border-collapse:collapse}
+.tbl th{font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);padding:.55rem .9rem;text-align:left;border-bottom:1px solid var(--border)}
+.tbl td{padding:.6rem .9rem;font-size:.82rem;border-bottom:1px solid rgba(30,45,69,.35)}
+.tbl tr:hover td{background:rgba(255,255,255,.015)}
+
+/* POSITION BADGES */
+.pos-badge{width:26px;height:26px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;font-family:'DM Mono',monospace;font-size:.7rem}
+.pos-top4{background:rgba(255,180,0,.1);color:var(--accent)}
+.pos-top8{background:rgba(77,166,255,.08);color:var(--blue)}
+.pos-mid{background:var(--surface2);color:var(--muted)}
+.pos-bot{background:rgba(255,79,109,.1);color:var(--down)}
+
+/* BANNERS */
+.banner{border-radius:8px;padding:.65rem 1rem;margin-bottom:1.1rem;font-size:.8rem;border:1px solid;display:flex;align-items:center;justify-content:space-between}
+.banner.open{background:rgba(0,201,122,.05);border-color:rgba(0,201,122,.2)}
+.banner.closed{background:rgba(255,79,109,.05);border-color:rgba(255,79,109,.2)}
+.dot{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:.5rem;vertical-align:middle}
+.dot.live{background:var(--up);animation:pulse 2s infinite}
+.dot.off{background:var(--down)}
+
+/* HOLDINGS */
+.holding{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.8rem 1rem;margin-bottom:.5rem;display:grid;grid-template-columns:1fr auto auto auto;align-items:center;gap:.75rem}
+.holding:hover{border-color:rgba(255,180,0,.2)}
+.hold-tag{font-size:.62rem;padding:.18rem .45rem;border-radius:4px;background:rgba(255,180,0,.1);color:var(--accent);border:1px solid rgba(255,180,0,.2);font-family:'DM Mono',monospace;white-space:nowrap}
+
+/* LEADERBOARD */
+.lb-row{display:grid;grid-template-columns:40px 1fr auto auto;align-items:center;gap:1rem;padding:.75rem 1.1rem;border-bottom:1px solid rgba(30,45,69,.35);cursor:pointer;transition:background .15s}
+.lb-row:last-child{border-bottom:none}
+.lb-row:hover{background:rgba(255,255,255,.02)}
+.lb-row.me{background:rgba(255,180,0,.04);border-left:2px solid var(--accent)}
+.rank-n{font-family:'Bebas Neue',sans-serif;font-size:1.4rem;text-align:center}
+
+/* PLAYER TABS */
+.player-tabs{display:flex;gap:.4rem;margin-bottom:1.1rem;flex-wrap:wrap}
+.player-tab{background:var(--surface2);border:1px solid var(--border);color:var(--muted);font-family:inherit;font-size:.78rem;font-weight:500;padding:.38rem .85rem;border-radius:999px;cursor:pointer;transition:all .2s}
+.player-tab:hover{color:var(--text)}
+.player-tab.active{background:rgba(255,180,0,.1);border-color:var(--accent);color:var(--accent)}
+.player-tab.ai{border-style:dashed}
+
+/* TRADE LOG */
+.tlog-item{display:flex;justify-content:space-between;align-items:center;padding:.45rem 0;border-bottom:1px solid rgba(30,45,69,.3);font-size:.78rem}
+.tlog-item:last-child{border-bottom:none}
+.tlog-type{font-family:'DM Mono',monospace;font-size:.65rem;padding:.14rem .38rem;border-radius:3px;margin-right:.4rem}
+.tlog-buy{background:rgba(0,201,122,.1);color:var(--up)}
+.tlog-sell{background:rgba(255,79,109,.1);color:var(--down)}
+
+/* MODAL */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.8);backdrop-filter:blur(5px);z-index:500;display:none;align-items:center;justify-content:center;padding:1rem}
+.overlay.open{display:flex}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:14px;width:100%;max-width:400px}
+.modal-hd{padding:1rem 1.25rem;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.modal-title{font-family:'Bebas Neue',sans-serif;font-size:1.1rem;letter-spacing:.05em}
+.modal-x{background:none;border:none;color:var(--muted);font-size:1.1rem;cursor:pointer;padding:.25rem}
+.modal-body{padding:1.25rem}
+.modal-info{background:var(--surface2);border-radius:8px;padding:.875rem;margin-bottom:1rem;display:flex;justify-content:space-between}
+.m-label{font-size:.65rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:.3rem}
+.m-val{font-family:'DM Mono',monospace;font-size:1.25rem;color:var(--accent)}
+.m-input-group{margin-bottom:1rem}
+.m-input-label{font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:.4rem}
+.m-input{width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:'DM Mono',monospace;font-size:.9rem;padding:.6rem .85rem;border-radius:7px;outline:none}
+.m-summary{background:var(--surface2);border-radius:8px;padding:.875rem;margin-bottom:.875rem;font-family:'DM Mono',monospace;font-size:.78rem}
+.m-row{display:flex;justify-content:space-between;margin-bottom:.4rem;color:var(--muted)}
+.m-row:last-child{margin-bottom:0;color:var(--text)}
+.m-row:last-child span:last-child{color:var(--accent)}
+.m-warn{background:rgba(255,79,109,.08);border:1px solid rgba(255,79,109,.2);border-radius:6px;padding:.65rem;font-size:.78rem;color:var(--down);margin-bottom:.875rem}
+.modal-footer{display:flex;gap:.6rem}
+.modal-footer .btn{flex:1;padding:.7rem;font-size:.85rem}
+
+/* TOAST */
+#toast{position:fixed;bottom:1.5rem;right:1.5rem;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:.875rem 1.1rem;max-width:280px;z-index:1000;transform:translateY(80px);opacity:0;transition:all .3s}
+#toast.show{transform:translateY(0);opacity:1}
+#toast.success{border-color:rgba(0,201,122,.35)}
+#toast.error{border-color:rgba(255,79,109,.35)}
+.toast-title{font-weight:600;font-size:.82rem;margin-bottom:.2rem}
+.toast.success .toast-title,.toast-title.success{color:var(--up)}
+.toast-title.error{color:var(--down)}
+.toast-msg{font-size:.75rem;color:var(--muted)}
+
+/* ADMIN */
+.admin-row{display:flex;align-items:center;justify-content:space-between;padding:.42rem 0;border-bottom:1px solid rgba(30,45,69,.3);font-size:.8rem}
+.admin-row:last-child{border-bottom:none}
+.admin-input{width:38px;background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:'DM Mono',monospace;font-size:.78rem;padding:.28rem .4rem;border-radius:5px;text-align:center;outline:none}
+.admin-input.pct{width:56px}
+.admin-input:focus{border-color:var(--accent)}
+
+.opp-chip{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:5px;background:var(--surface2);border:1px solid var(--border);font-size:.85rem;cursor:default;position:relative;margin-right:2px}
+.opp-chip:hover::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 4px);left:50%;transform:translateX(-50%);background:#1a2540;border:1px solid var(--border);color:var(--text);font-size:.68rem;white-space:nowrap;padding:.25rem .5rem;border-radius:5px;pointer-events:none;z-index:200}
+.opp-bye{background:rgba(99,112,137,.15);color:var(--muted);font-family:'DM Mono',monospace;font-size:.62rem;font-weight:700}
+.fix-select{background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:inherit;font-size:.75rem;padding:.28rem .4rem;border-radius:5px;outline:none;cursor:pointer}
+.fix-select:focus{border-color:var(--accent)}
+.empty-icon{font-size:1.6rem;margin-bottom:.5rem}
+.mono{font-family:'DM Mono',monospace}
+
+@media(max-width:640px){
+  .stats-row{grid-template-columns:1fr 1fr}
+  #marketTopRow{grid-template-columns:1fr!important}
+  .two-col{grid-template-columns:1fr}
+  .holding{grid-template-columns:1fr auto}
+  .hide-mob{display:none}
+  nav button{font-size:.72rem;padding:.38rem .6rem}
+}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginScreen" class="login-wrap">
+  <div class="login-card">
+    <div class="login-logo">Sportfolio</div>
+    <div class="login-season">AFL 2026 · Rounds 1–10</div>
+    <div class="login-sub">Select your player to enter the game.<br>All trades and prices are live and shared.</div>
+    <div id="loginButtons"></div>
+    <div style="margin-top:1rem;font-size:.72rem;color:var(--muted)">Tyson is the admin · State syncs every 15 seconds</div>
+  </div>
+</div>
+
+<!-- GAME -->
+<div id="gameScreen" style="display:none">
+  <header>
+    <div>
+      <div class="logo">Sport<span>folio</span></div>
+      <small style="font-family:'DM Sans',sans-serif;font-size:.6rem;color:var(--muted);letter-spacing:.12em;text-transform:uppercase">AFL 2026 · Rounds 1–10</small>
+    </div>
+    <nav>
+      <button class="active" onclick="showTab('market',this)">📈 Market</button>
+      <button onclick="showTab('portfolio',this)">💼 Portfolio</button>
+      <button onclick="showTab('leaderboard',this)">🏆 Leaderboard</button>
+      <button onclick="showTab('rules',this)">📋 Rules</button>
+      <button id="adminNavBtn" onclick="showTab('admin',this)" style="display:none">⚙ Admin</button>
+    </nav>
+    <div class="hdr-right">
+      <div style="font-size:.72rem;color:var(--muted)"><span class="sync-dot" id="syncDot"></span><span id="syncLabel">Live</span></div>
+      <div class="round-badge">
+        <div class="rl">Round</div>
+        <div class="rv" id="roundDisplay">PRE</div>
+      </div>
+      <button class="btn sm" onclick="logout()">← Switch</button>
+      <button class="btn sm danger" id="backBtn" onclick="backRound()" style="display:none">← Back</button>
+      <button class="btn primary sm" id="advanceBtn" onclick="advanceRound()" style="display:none">Advance Round →</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- MARKET -->
+    <div class="page active" id="tab-market">
+      <div id="tradingBanner" class="banner open">
+        <div><span class="dot live"></span><strong>Trading Open</strong></div>
+      </div>
+      <div style="display:grid;grid-template-columns:200px 1fr;gap:1rem;margin-bottom:1.25rem;align-items:start" id="marketTopRow">
+        <div style="display:flex;flex-direction:column;gap:.6rem">
+          <div class="stat-card"><div class="stat-label">Your Portfolio</div><div class="stat-val" id="mPortfolio">$10,000</div><div class="stat-sub" id="mPortfolioChg">—</div></div>
+          <div class="stat-card"><div class="stat-label">Cash</div><div class="stat-val" style="color:var(--blue)" id="mCash">$10,000</div><div class="stat-sub" style="color:var(--muted)">Available</div></div>
+          <div class="stat-card"><div class="stat-label">Rank</div><div class="stat-val" id="mRank">#—</div><div class="stat-sub" style="color:var(--muted)">of 10 players</div></div>
+          <div class="stat-card"><div class="stat-label">Trades This Round</div><div class="stat-val" id="mTrades">0</div><div class="stat-sub" style="color:var(--muted)" id="mNextFee">Next fee: —</div></div>
+        </div>
+        <div class="card" id="myHoldingsCard" style="display:none">
+          <div class="card-hd">
+            <div class="card-title">Your Holdings</div>
+            <div style="font-size:.7rem;color:var(--muted)" id="myHoldingsTotal"></div>
+          </div>
+          <div style="overflow-x:auto">
+            <table class="tbl">
+              <thead><tr>
+                <th>Team</th>
+                <th style="text-align:right">Shares</th>
+                <th style="text-align:right">Price</th>
+                <th style="text-align:right">Value</th>
+                <th style="text-align:right">P&amp;L</th>
+                <th style="text-align:center">Hold</th>
+              </tr></thead>
+              <tbody id="myHoldingsBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-hd">
+          <div class="card-title">AFL 2026 Ladder & Share Prices</div>
+          <div style="font-size:.7rem;color:var(--muted)">⭐ Top 4 earn interest · ⚠ Last team taxed</div>
+        </div>
+        <div style="overflow-x:auto">
+          <table class="tbl">
+            <thead><tr>
+              <th>Pos</th><th>Team</th>
+              <th class="hide-mob">W–L–D</th>
+              <th class="hide-mob">Pts</th>
+              <th class="hide-mob">%</th>
+              <th>Price</th>
+              <th>Change</th>
+              <th>You Hold</th>
+              <th class="hide-mob">Next 3</th>
+              <th></th>
+            </tr></thead>
+            <tbody id="ladderBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- PORTFOLIO -->
+    <div class="page" id="tab-portfolio">
+      <div class="player-tabs" id="playerTabs"></div>
+      <div id="portfolioContent"></div>
+    </div>
+
+    <!-- LEADERBOARD -->
+    <div class="page" id="tab-leaderboard">
+      <div class="two-col">
+        <div class="card">
+          <div class="card-hd"><div class="card-title">Rankings</div><div style="font-size:.72rem;color:var(--muted)" id="lbRoundLabel">Pre-Season</div></div>
+          <div id="lbList"></div>
+        </div>
+        <div>
+          <div class="card" style="margin-bottom:1rem">
+            <div class="card-hd"><div class="card-title">Top Movers</div></div>
+            <div class="card-body" id="topMovers"><div class="empty-state"><div class="empty-icon">📊</div>Advance to Round 1 to see movers.</div></div>
+          </div>
+          <div class="card">
+            <div class="card-hd"><div class="card-title">Round Summary</div></div>
+            <div class="card-body" id="roundSummary">
+              <div style="font-size:.82rem;color:var(--muted)">Advance to Round 1 to see results.</div>
+              <button class="btn sm" style="margin-top:.75rem;width:100%" onclick="refreshState()">🔄 Refresh</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RULES -->
+    <div class="page" id="tab-rules">
+      <div class="card" style="max-width:760px;margin:0 auto">
+        <div class="card-hd">
+          <div class="card-title">Season Rules — AFL 2026</div>
+          <div style="font-size:.72rem;color:var(--muted)">Reference these by number when discussing changes</div>
+        </div>
+        <div class="card-body">
+          <div style="font-size:.82rem;line-height:1.9;color:var(--muted)">
+
+            <div style="margin-bottom:1.25rem">
+              <div style="font-family:'Bebas Neue',sans-serif;font-size:.8rem;letter-spacing:.1em;color:var(--accent);margin-bottom:.5rem">GETTING STARTED</div>
+              <div style="margin-bottom:.5rem"><span style="font-family:'DM Mono',monospace;color:var(--text);font-size:.78rem;margin-right:.6rem">1.</span>Each player starts with <strong style="color:var(--text)">$10,000</strong> to invest.</div>
+              <div style="margin-bottom:.5rem"><span style="font-family:'DM Mono',monospace;color:var(--text);font-size:.78rem;margin-right:.6rem">2.</span>Share prices are based on each team's ladder position — 1st costs <strong style="color:var(--text)">$6.12</strong>, 18th costs <strong style="color:var(--text)">$1.00</strong>. <em style="font-size:.78rem">(Before Opening Round, positions and prices are based on 2026 AFL premiership odds.)</em></div>
+              <div style="margin-bottom:.5rem"><span style="font-family:'DM Mono',monospace;color:var(--text);font-size:.78rem;margin-right:.6rem">3.</span>Prices update each week when the admin (Tyson) enters the new AFL ladder results.</div>
+            </div>
+
+            <div style="margin-bottom:1.25rem">
+              <div style="font-family:'Bebas Neue',sans-serif;font-size:.8rem;letter-spacing:.1em;color:var(--accent);margin-bottom:.5rem">TRADING WINDOWS & LOCKOUT</div>
+              <div style="margin-bottom:.5rem"><span style="font-family:'DM Mono',monospace;color:var(--text);font-size:.78rem;margin-right:.6rem">4.</span>Each round has a <strong style="color:var(--text)">trading window</strong> that opens when the admin advances the round and closes 30 minutes before the first game of that round.</div>
+              <div style="margin-bottom:.5rem"><span style="font-family:'DM Mono',monospace;color:var(--text);font-size:.78rem;margin-right:.6rem">5.</span>During the trading window, you can only see <strong style="color:var(--text)">your own</strong> live portfolio. All other players' portfolios and the leaderboard show a <strong style="color:var(--text)">snapshot from the end of the previous round</strong> — so your trades remain private until the deadline.</div>
+              <div style="margin-bottom:.5rem"><span style="font-family:'DM Mono',monospace;color:var(--text);font-size:.78rem;margin-right:.6rem">6.</span>Once the deadline passes, trading <strong style="color:var(--text)">locks automatically</strong>. All portfolios are revealed and remain visible until the admin advances to the next round.</div>
+              <div style="margin-bottom:.5rem"><span style="font-family:'DM Mono',monospace;color:var(--text);font-size:.78rem;margin-right:.6rem">7.</span>You can <strong style="color:var(--text)">undo any trade</strong> made during the current trading window — shares and fees are fully reversed. Once the round advances, all trades are locked permanently.</div>
+            </div>
+
+            <div style="margin-bottom:1.25rem">
+              <div style="font-family:'Bebas Neue',sans-serif;font-size:.8rem;letter-spacing:.1em;color:var(--accent);margin-bottom:.5rem">THE SEASON</div>
+              <div style="margin-bottom:.5rem"><span style="font-family:'DM Mono',monospace;color:var(--text);font-size:.78rem;margin-right:.6rem">8.</span>The season runs for <strong style="color:var(--text)">10 rounds</strong>, mirroring the real AFL season: Opening Round, then Round 1 through Round 9.</div>
+            </div>
+
+            <div style="margin-bottom:1.25rem">
+              <div style="font-family:'Bebas Neue',sans-serif;font-size:.8rem;letter-spacing:.1em;color:var(--accent);margin-bottom:.5rem">PORTFOLIO LIMITS</div>
+              <div style="margin-bottom:.5rem"><span style="font-family:'DM Mono',monospace;color:var(--text);font-size:.78rem;margin-right:.6rem">9.</span>You may not invest more than <strong style="color:var(--text)">25%</strong> of your total portfolio value in any single team.</div>
+              <div style="margin-bottom:.5rem"><span style="font-family:'DM Mono',monospace;color:var(--text);font-size:.78rem;margin-right:.6rem">10.</span>You may not hold more than <strong style="color:var(--text)">50%</strong> of your portfolio value in cash.</div>
+            </div>
+
+            <div style="margin-bottom:1.25rem">
+              <div style="font-family:'Bebas Neue',sans-serif;font-size:.8rem;letter-spacing:.1em;color:var(--accent);margin-bottom:.5rem">HOLD PERIODS</div>
+              <div style="margin-bottom:.5rem"><span style="font-family:'DM Mono',monospace;color:var(--text);font-size:.78rem;margin-right:.6rem">11.</span>All shares — whether purchased in the pre-season or during the season — must be held for a minimum of <strong style="color:var(--text)">2 rounds</strong> before selling.</div>
+            </div>
+
+            <div style="margin-bottom:1.25rem">
+              <div style="font-family:'Bebas Neue',sans-serif;font-size:.8rem;letter-spacing:.1em;color:var(--accent);margin-bottom:.5rem">BROKERAGE</div>
+              <div style="margin-bottom:.5rem"><span style="font-family:'DM Mono',monospace;color:var(--text);font-size:.78rem;margin-right:.6rem">12.</span>Each trade incurs a brokerage fee of <strong style="color:var(--text)">0.5%</strong> of your total portfolio value.</div>
+              <div style="margin-bottom:.5rem"><span style="font-family:'DM Mono',monospace;color:var(--text);font-size:.78rem;margin-right:.6rem">13.</span>Each additional trade in the same round <strong style="color:var(--text)">doubles</strong> the brokerage fee — 1st trade: 0.5%, 2nd: 1.0%, 3rd: 2.0%, and so on.</div>
+            </div>
+
+            <div style="margin-bottom:1.25rem">
+              <div style="font-family:'Bebas Neue',sans-serif;font-size:.8rem;letter-spacing:.1em;color:var(--accent);margin-bottom:.5rem">INTEREST & TAX</div>
+              <div style="margin-bottom:.5rem"><span style="font-family:'DM Mono',monospace;color:var(--text);font-size:.78rem;margin-right:.6rem">14.</span>Teams finishing in the <strong style="color:var(--text)">top 4</strong> pay weekly interest on your shareholding: 1st: <strong style="color:var(--up)">2%</strong>, 2nd: <strong style="color:var(--up)">1.5%</strong>, 3rd: <strong style="color:var(--up)">1%</strong>, 4th: <strong style="color:var(--up)">0.5%</strong>.</div>
+              <div style="margin-bottom:.5rem"><span style="font-family:'DM Mono',monospace;color:var(--text);font-size:.78rem;margin-right:.6rem">15.</span>Interest only applies if the team has been in the top 4 <strong style="color:var(--text)">consecutively</strong> — no interest is paid in the first round a team enters the top 4.</div>
+              <div style="margin-bottom:.5rem"><span style="font-family:'DM Mono',monospace;color:var(--text);font-size:.78rem;margin-right:.6rem">16.</span>The team finishing <strong style="color:var(--text)">last (18th)</strong> incurs a weekly tax of <strong style="color:var(--down)">1%</strong> on your shareholding.</div>
+            </div>
+
+            <div>
+              <div style="font-family:'Bebas Neue',sans-serif;font-size:.8rem;letter-spacing:.1em;color:var(--accent);margin-bottom:.5rem">PLAYERS</div>
+              <div style="margin-bottom:.5rem"><span style="font-family:'DM Mono',monospace;color:var(--text);font-size:.78rem;margin-right:.6rem">17.</span>There are <strong style="color:var(--text)">3 human players</strong> (Tyson, Jas, Sam) and <strong style="color:var(--text)">7 AI opponents</strong>.</div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ADMIN (Tyson only) -->
+    <div class="page" id="tab-admin">
+      <div class="two-col">
+        <div class="card">
+          <div class="card-hd">
+            <div class="card-title">Update Ladder — Round <span id="adminRoundNum">1</span></div>
+            <button class="btn primary sm" onclick="applyLadderUpdate()">Apply Update</button>
+          </div>
+          <div class="card-body">
+            <p style="font-size:.75rem;color:var(--muted);margin-bottom:.875rem">Enter W/L/D and percentage after each AFL round. Ladder auto-sorts by points then percentage.</p>
+            <div id="adminInputs"></div>
+          </div>
+        </div>
+        <div>
+          <div class="card" style="margin-bottom:1rem">
+            <div class="card-hd">
+              <div class="card-title">Trade Deadline</div>
+              <button class="btn primary sm" onclick="saveDeadline()">Set Deadline</button>
+            </div>
+            <div class="card-body">
+              <p style="font-size:.75rem;color:var(--muted);margin-bottom:.75rem">Set the deadline for this round's trading window — 30 mins before the first game. Once this time passes, trading locks automatically and all portfolios are revealed.</p>
+              <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
+                <input type="date" id="deadlineDateInput" class="admin-input" style="width:auto;font-size:.8rem;padding:.4rem .6rem">
+                <input type="time" id="deadlineTimeInput" class="admin-input" style="width:auto;font-size:.8rem;padding:.4rem .6rem">
+                <span id="deadlineStatus" style="font-size:.75rem;color:var(--muted)"></span>
+              </div>
+            </div>
+          </div>
+            <div class="card-body" style="font-size:.8rem;line-height:1.75;color:var(--muted)">
+              <p style="margin-bottom:.75rem"><strong style="color:var(--text)">Each week as admin (Tyson):</strong></p>
+              <ol style="margin-left:1.1rem;display:flex;flex-direction:column;gap:.35rem">
+                <li>AFL round finishes over the weekend</li>
+                <li>Enter updated W/L/D and % for each team above</li>
+                <li>Click <strong style="color:var(--accent)">Apply Update</strong> — everyone sees new prices instantly</li>
+                <li>Jas and Sam make their own trades directly at this URL</li>
+                <li>Click <strong style="color:var(--accent)">Advance Round →</strong> in the header when trading closes</li>
+              </ol>
+            </div>
+          </div>
+          <div class="card" style="margin-bottom:1rem">
+            <div class="card-hd">
+              <div class="card-title">Live Ladder (Squiggle)</div>
+              <button class="btn primary sm" onclick="fetchLiveLadder()">⚡ Fetch Now</button>
+            </div>
+            <div class="card-body">
+              <p style="font-size:.75rem;color:var(--muted)">Automatically polls the Squiggle API every 5 minutes during a round lockout. Use Fetch Now to manually pull the latest ladder. Ladder updates flow through to share prices immediately.</p>
+              <div id="squiggleStatus" style="font-size:.72rem;color:var(--muted);margin-top:.5rem"></div>
+            </div>
+          </div>
+          <div class="card" style="margin-bottom:1rem">
+            <div class="card-hd">
+              <div class="card-title">AI Pre-Season Trades</div>
+              <button class="btn primary sm" onclick="triggerAIPreseason()">Run AI Pre-Season</button>
+            </div>
+            <div class="card-body">
+              <p style="font-size:.75rem;color:var(--muted)">Triggers AI players to research and make their pre-season investments. Only run this once at the start of the season. Takes 15–30 seconds.</p>
+            </div>
+          </div>
+          <div class="card" style="margin-bottom:1rem">
+            <div class="card-hd">
+              <div class="card-title">Emergency: Decrement Round</div>
+              <button class="btn sm danger" onclick="decrementRound()">− Round</button>
+            </div>
+            <div class="card-body">
+              <p style="font-size:.75rem;color:var(--muted)">Rolls back the round counter by 1 and reopens the trading window. Does NOT undo AI trades or portfolio changes — use only to fix an accidental double-advance.</p>
+            </div>
+          </div>
+              <button class="btn sm" onclick="loadResearchLog()">Refresh</button>
+            </div>
+            <div class="card-body" id="researchLog">
+              <div class="empty-state"><div class="empty-icon">🔬</div>No AI research yet. Advance a round to see it.</div>
+            </div>
+          </div>
+          <div class="card" style="margin-bottom:1rem">
+            <div class="card-hd">
+              <div class="card-title">Backup & Restore</div>
+            </div>
+            <div class="card-body">
+              <p style="font-size:.75rem;color:var(--muted);margin-bottom:.875rem">Download a backup of the current game state. If anything goes wrong, you can restore from a backup file.</p>
+              <div style="display:flex;gap:.75rem;flex-wrap:wrap">
+                <button class="btn primary sm" onclick="downloadBackup()">⬇ Download Backup</button>
+                <label class="btn sm" style="cursor:pointer">
+                  ⬆ Restore from Backup
+                  <input type="file" id="restoreFile" accept=".json" style="display:none" onchange="restoreBackup(this)">
+                </label>
+              </div>
+            </div>
+          </div>
+            <div class="card-body" id="adminStandings"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- BUY MODAL -->
+<div class="overlay" id="buyOverlay">
+  <div class="modal">
+    <div class="modal-hd">
+      <div class="modal-title">Buy Shares — <span id="buyTeam"></span></div>
+      <button class="modal-x" onclick="closeBuyModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size:.72rem;color:var(--muted);margin-bottom:.875rem">Buying as: <strong id="buyingAs" style="color:var(--text)"></strong></div>
+      <div class="modal-info">
+        <div><div class="m-label">Share Price</div><div class="m-val" id="buyPriceDisplay">—</div></div>
+        <div style="text-align:right"><div class="m-label">Your Cash</div><div class="m-val" style="color:var(--blue)" id="buyCashDisplay">—</div></div>
+      </div>
+      <div class="m-input-group">
+        <div class="m-input-label">Amount to Invest ($)</div>
+        <input class="m-input" type="number" id="buyAmtInput" placeholder="e.g. 2000" oninput="updateBuySummary()" min="1">
+      </div>
+      <div class="m-summary">
+        <div class="m-row"><span>Shares you'll receive</span><span id="bShares">—</span></div>
+        <div class="m-row"><span>Brokerage fee</span><span id="bFee">—</span></div>
+        <div class="m-row"><span>Total cost</span><span id="bTotal">—</span></div>
+        <div class="m-row"><span>Remaining cash</span><span id="bRemain">—</span></div>
+      </div>
+      <div class="m-warn" id="buyWarnEl" style="display:none"></div>
+      <div class="modal-footer">
+        <button class="btn" onclick="closeBuyModal()">Cancel</button>
+        <button class="btn primary" id="buyConfirmBtn" onclick="submitBuy()">Confirm Buy</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SELL MODAL -->
+<div class="overlay" id="sellOverlay">
+  <div class="modal">
+    <div class="modal-hd">
+      <div class="modal-title">Sell Shares — <span id="sellTeam"></span></div>
+      <button class="modal-x" onclick="closeSellModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-info">
+        <div><div class="m-label">Current Price</div><div class="m-val" id="sellPriceDisplay">—</div></div>
+        <div style="text-align:right"><div class="m-label">Your Shares</div><div class="m-val" style="color:var(--blue)" id="sellSharesDisplay">—</div></div>
+      </div>
+      <div class="m-warn" id="sellHoldWarn" style="display:none"></div>
+      <div class="m-input-group">
+        <div class="m-input-label">Shares to Sell</div>
+        <input class="m-input" type="number" id="sellAmtInput" placeholder="Number of shares" oninput="updateSellSummary()">
+      </div>
+      <div class="m-summary">
+        <div class="m-row"><span>Sale value</span><span id="sValue">—</span></div>
+        <div class="m-row"><span>Brokerage fee</span><span id="sFee">—</span></div>
+        <div class="m-row"><span>Net proceeds</span><span id="sNet">—</span></div>
+      </div>
+      <div class="m-warn" id="sellWarnEl" style="display:none"></div>
+      <div class="modal-footer">
+        <button class="btn" onclick="closeSellModal()">Cancel</button>
+        <button class="btn" id="sellConfirmBtn" style="background:var(--down);border-color:var(--down);color:#fff;font-weight:700;flex:1;padding:.7rem;font-size:.85rem" onclick="submitSell()">Confirm Sell</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"><div class="toast-title" id="toastTitle"></div><div class="toast-msg" id="toastMsg"></div></div>
+
+<script>
+// ================================================================
+// CLIENT-SIDE GAME CLIENT
+// ================================================================
+
+const PRICE_SCALE = {1:6.12,2:5.56,3:5.05,4:4.59,5:4.18,6:3.80,7:3.45,8:3.14,9:2.85,10:2.59,11:2.36,12:2.14,13:1.95,14:1.77,15:1.61,16:1.46,17:1.33,18:1.00};
+const INTEREST_RATES = {1:0.02,2:0.015,3:0.01,4:0.005};
+const HUMAN_PLAYERS = ["Tyson","Jas","Sam"];
+const AI_PLAYERS = ["Alex","Jordan","Casey","Riley","Morgan","Quinn","Blake"];
+const ALL_PLAYERS = [...HUMAN_PLAYERS,...AI_PLAYERS];
+const PORTFOLIO_CAP = 0.25;
+
+let gameState = null;
+let currentPlayer = null;
+let viewingPlayer = null;
+let activeBuyTeam = null;
+let activeSellTeam = null;
+let syncInterval = null;
+let toastTimer = null;
+
+// ── FORMAT ───────────────────────────────────────────────────
+const fmt = n => "$"+Math.abs(n).toLocaleString("en-AU",{minimumFractionDigits:0,maximumFractionDigits:0});
+const fmtD = n => (n>=0?"+":"-")+fmt(Math.abs(n));
+const fmtP = n => (n>=0?"+":"")+n.toFixed(1)+"%";
+const fmtS = n => Math.round(n).toLocaleString();
+
+// ── STATE ────────────────────────────────────────────────────
+function getPrice(teamName, ladder) {
+  const pos = (ladder||gameState.ladder).findIndex(t=>t.name===teamName);
+  return PRICE_SCALE[pos+1]||PRICE_SCALE[18];
+}
+function getTotal(player, ladder) {
+  const ldr = ladder||gameState.ladder;
+  return player.cash + player.holdings.reduce((s,h)=>s+h.shares*getPrice(h.team,ldr),0);
+}
+function getBrokerageFee(player) {
+  return getTotal(player)*0.005*Math.pow(2,player.tradesThisRound);
+}
+function canSell(holding) {
   const minHold = holding.buyRound===0?3:2;
   return (gameState.round-holding.buyRound)>=minHold;
 }
