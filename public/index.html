@@ -576,13 +576,32 @@ function getTotal(player, ladder) {
 function getBrokerageFee(player) {
   return getTotal(player)*0.005*Math.pow(2,player.tradesThisRound);
 }
+function getTeamTranches(playerName, teamName) {
+  return (gameState.players[playerName]?.holdings || []).filter(h => h.team === teamName);
+}
 function canSell(holding) {
   const minHold = holding.buyRound===0?2:2;
   return (gameState.round-holding.buyRound)>=minHold;
 }
+function eligibleShares(teamName, playerName) {
+  return getTeamTranches(playerName || currentPlayer, teamName)
+    .filter(h => canSell(h))
+    .reduce((s, h) => s + h.shares, 0);
+}
+function totalShares(teamName, playerName) {
+  return getTeamTranches(playerName || currentPlayer, teamName)
+    .reduce((s, h) => s + h.shares, 0);
+}
 function roundsLeft(holding) {
   const minHold = holding.buyRound===0?2:2;
   return Math.max(0,minHold-(gameState.round-holding.buyRound));
+}
+function minRoundsLeft(teamName, playerName) {
+  const tranches = getTeamTranches(playerName || currentPlayer, teamName);
+  if (!tranches.length) return 0;
+  const ineligible = tranches.filter(h => !canSell(h));
+  if (!ineligible.length) return 0;
+  return Math.min(...ineligible.map(h => roundsLeft(h)));
 }
 function getRank(playerName) {
   return [...ALL_PLAYERS].map(n=>({n,v:getTotal(gameState.players[n])})).sort((a,b)=>b.v-a.v).findIndex(p=>p.n===playerName)+1;
@@ -734,23 +753,31 @@ function updateHeaderUI() {
     holdingsCard.style.display = "";
     const invested = myP.holdings.reduce((s,h) => s + h.shares * getPrice(h.team), 0);
     holdingsTotal.textContent = `Invested ${fmt(invested)} · Cash ${fmt(myP.cash)} · Total ${fmt(myTotal)}`;
-    holdingsBody.innerHTML = myP.holdings.map(h => {
-      const price = getPrice(h.team);
-      const val = h.shares * price;
-      const cost = h.shares * h.buyPrice;
-      const pnl = val - cost;
-      const pnlPct = cost > 0 ? pnl / cost * 100 : 0;
-      const cs = canSell(h);
-      const rl = roundsLeft(h);
+    const heldTeams = [...new Set(myP.holdings.map(h => h.team))];
+    holdingsBody.innerHTML = heldTeams.map(teamName => {
+      const tranches = myP.holdings.filter(h => h.team === teamName);
+      const price = getPrice(teamName);
+      const totalShrs = tranches.reduce((s,h) => s+h.shares, 0);
+      const totalCost = tranches.reduce((s,h) => s+h.shares*h.buyPrice, 0);
+      const val = totalShrs * price;
+      const pnl = val - totalCost;
+      const pnlPct = totalCost > 0 ? pnl / totalCost * 100 : 0;
+      const eligible = tranches.filter(h=>canSell(h)).reduce((s,h)=>s+h.shares,0);
+      const locked = totalShrs - eligible;
       const pnlColor = pnl >= 0 ? "var(--up)" : "var(--down)";
-      const emoji = gs.ladder.find(t => t.name === h.team)?.emoji || "";
+      const emoji = gs.ladder.find(t => t.name === teamName)?.emoji || "";
+      const holdStatus = eligible > 0 && locked > 0
+        ? `<span style="color:var(--accent);font-size:.72rem">${fmtS(locked)} locked</span>`
+        : eligible > 0
+          ? '<span style="color:var(--up);font-size:.72rem">✓ Can sell</span>'
+          : `<span class="hold-tag">HOLD ${minRoundsLeft(teamName)}R</span>`;
       return `<tr>
-        <td><span style="margin-right:.4rem">${emoji}</span>${h.team}</td>
-        <td style="text-align:right;font-family:'DM Mono',monospace;font-size:.78rem">${fmtS(h.shares)}</td>
+        <td><span style="margin-right:.4rem">${emoji}</span>${teamName}</td>
+        <td style="text-align:right;font-family:'DM Mono',monospace;font-size:.78rem">${fmtS(totalShrs)}</td>
         <td style="text-align:right;font-family:'DM Mono',monospace;font-size:.78rem">$${price.toFixed(2)}</td>
         <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:600">${fmt(val)}</td>
         <td style="text-align:right;font-family:'DM Mono',monospace;font-size:.75rem;color:${pnlColor}" class="hide-mob">${fmtD(pnl)}<br><span style="font-size:.68rem">(${fmtP(pnlPct)})</span></td>
-        <td style="text-align:center" class="hide-mob">${cs ? '<span style="color:var(--up);font-size:.72rem">✓ Can sell</span>' : `<span class="hold-tag">HOLD ${rl}R</span>`}</td>
+        <td style="text-align:center" class="hide-mob">${holdStatus}</td>
       </tr>`;
     }).join("") + `<tr style="border-top:1px solid var(--border)">
         <td colspan="3" style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em">Cash</td>
@@ -785,18 +812,24 @@ function renderLadder() {
   gs.ladder.forEach((team,idx) => {
     const pos = idx+1;
     const price = PRICE_SCALE[pos];
-    const prevPrice = gs.prevLadder ? getPrice(team.name,gs.prevLadder) : price;
-    const chg = price-prevPrice;
-    const myH = displayP.holdings ? displayP.holdings.find(h=>h.team===team.name) : myP.holdings.find(h=>h.team===team.name);
+    const deadline = gs.tradeDeadline ? new Date(gs.tradeDeadline).getTime() : null;
+    const isLocked = deadline && Date.now() > deadline;
+    // During lockout show change vs round-start ladder; during trading show change vs last round
+    const compareLadder = isLocked && gs.snapshotLadder ? gs.snapshotLadder : gs.prevLadder;
+    const prevPrice = compareLadder ? getPrice(team.name, compareLadder) : price;
+    const chg = price - prevPrice;
+    const changeLabel = isLocked ? "vs round start" : "vs last round";
+    const myHTranches = displayP.holdings ? displayP.holdings.filter(h=>h.team===team.name) : myP.holdings.filter(h=>h.team===team.name);
+    const myHTotalShares = myHTranches.reduce((s,h)=>s+h.shares,0);
     let posClass = pos<=4?"pos-top4":pos<=8?"pos-top8":pos===18?"pos-bot":"pos-mid";
     let chgHtml = "<span style='color:var(--muted)'>—</span>";
-    if (gs.prevLadder) {
+    if (compareLadder) {
       const color = chg>0.01?"var(--up)":chg<-0.01?"var(--down)":"var(--muted)";
       const bg = chg>0.01?"rgba(0,201,122,.1)":chg<-0.01?"rgba(255,79,109,.1)":"var(--surface2)";
-      chgHtml = `<span style="font-family:'DM Mono',monospace;font-size:.72rem;padding:.18rem .45rem;border-radius:4px;background:${bg};color:${color}">${chg>0.01?`▲$${chg.toFixed(2)}`:chg<-0.01?`▼$${Math.abs(chg).toFixed(2)}`:"—"}</span>`;
+      chgHtml = `<span style="font-family:'DM Mono',monospace;font-size:.72rem;padding:.18rem .45rem;border-radius:4px;background:${bg};color:${color}" title="${changeLabel}">${chg>0.01?`▲$${chg.toFixed(2)}`:chg<-0.01?`▼$${Math.abs(chg).toFixed(2)}`:"—"}</span>`;
     }
     const interestNote = pos<=4?`<span style="font-size:.58rem;color:var(--up);margin-left:.4rem">+${INTEREST_RATES[pos]*100}%/wk</span>`:pos===18?`<span style="font-size:.58rem;color:var(--down);margin-left:.4rem">-1%/wk</span>`:"";
-    const holdingHtml = myH?`<span style="font-family:'DM Mono',monospace;font-size:.72rem;color:var(--accent)">${fmt(myH.shares*price)}</span>`:`<span style="color:var(--dim);font-size:.72rem">—</span>`;
+    const holdingHtml = myHTotalShares>0?`<span style="font-family:'DM Mono',monospace;font-size:.72rem;color:var(--accent)">${fmt(myHTotalShares*price)}</span>`:`<span style="color:var(--dim);font-size:.72rem">—</span>`;
 
     // Upcoming opponents
     const fixtures = gs.fixtures || {};
@@ -893,28 +926,39 @@ function renderPortfolio() {
         <div class="card">
           <div class="card-hd"><div class="card-title">Holdings</div></div>
           <div class="card-body">
-            ${vP.holdings.length===0?`<div class="empty-state"><div class="empty-icon">📊</div>No holdings yet.</div>`:
-              vP.holdings.map(h=>{
-                const price = getPrice(h.team);
-                const val = h.shares*price;
-                const pnl = val-(h.shares*h.buyPrice);
-                const pnlPct = pnl/(h.shares*h.buyPrice)*100;
-                const cs = canSell(h);
-                const rl = roundsLeft(h);
+            ${vP.holdings.length===0?`<div class="empty-state"><div class="empty-icon">📊</div>No holdings yet.</div>`:(()=>{
+              // Group tranches by team
+              const teams = [...new Set(vP.holdings.map(h=>h.team))];
+              return teams.map(teamName => {
+                const tranches = vP.holdings.filter(h=>h.team===teamName);
+                const price = getPrice(teamName);
+                const totalVal = tranches.reduce((s,h)=>s+h.shares*price,0);
+                const totalShrs = tranches.reduce((s,h)=>s+h.shares,0);
+                const totalCost = tranches.reduce((s,h)=>s+h.shares*h.buyPrice,0);
+                const pnl = totalVal - totalCost;
+                const pnlPct = totalCost>0?pnl/totalCost*100:0;
+                const eligible = tranches.filter(h=>canSell(h)).reduce((s,h)=>s+h.shares,0);
+                const locked = totalShrs - eligible;
+                const canSellAny = eligible > 0;
+                const trancheDetail = tranches.length > 1
+                  ? tranches.map(h=>`${fmtS(h.shares)} @ $${h.buyPrice.toFixed(2)} (R${h.buyRound===0?"Pre":h.buyRound})${canSell(h)?"":" HOLD "+roundsLeft(h)+"R"}`).join(" · ")
+                  : `${fmtS(totalShrs)} shares · bought $${tranches[0].buyPrice.toFixed(2)} · now $${price.toFixed(2)}`;
                 return `
                   <div class="holding">
                     <div>
-                      <div style="font-weight:600;font-size:.88rem">${h.team}</div>
-                      <div style="font-size:.68rem;color:var(--muted);font-family:'DM Mono',monospace;margin-top:.1rem">${fmtS(h.shares)} shares · bought $${h.buyPrice.toFixed(2)} · now $${price.toFixed(2)}</div>
+                      <div style="font-weight:600;font-size:.88rem">${teamName}</div>
+                      <div style="font-size:.68rem;color:var(--muted);font-family:'DM Mono',monospace;margin-top:.1rem">${trancheDetail}</div>
+                      ${locked>0?`<div style="font-size:.65rem;color:var(--accent);margin-top:.1rem">${fmtS(locked)} shares locked · ${fmtS(eligible)} sellable now</div>`:""}
                     </div>
-                    <div>${!cs?`<span class="hold-tag">HOLD ${rl}R</span>`:""}</div>
+                    <div>${!canSellAny&&tranches.length===1?`<span class="hold-tag">HOLD ${roundsLeft(tranches[0])}R</span>`:""}</div>
                     <div style="text-align:right;font-family:'DM Mono',monospace">
-                      <div style="font-size:.9rem">${fmt(val)}</div>
+                      <div style="font-size:.9rem">${fmt(totalVal)}</div>
                       <div style="font-size:.7rem;color:${pnl>=0?"var(--up)":"var(--down)"}">${fmtD(pnl)} (${fmtP(pnlPct)})</div>
                     </div>
-                    ${canAct?`<button class="sell-btn" onclick="openSellModal('${h.team}')" ${!cs||!isOpen?"disabled":""}>${cs?"SELL":"HOLD"}</button>`:"<div></div>"}
+                    ${canAct?`<button class="sell-btn" onclick="openSellModal('${teamName}')" ${!canSellAny||!isOpen?"disabled":""}>${canSellAny?"SELL":"HOLD"}</button>`:"<div></div>"}
                   </div>`;
-              }).join("")}
+              }).join("");
+            })()}
             <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.75rem 1rem;display:flex;justify-content:space-between;align-items:center;margin-top:.5rem">
               <span style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em">Cash</span>
               <span style="font-family:'DM Mono',monospace;color:var(--blue)">${fmt(vP.cash)}</span>
@@ -1432,47 +1476,52 @@ function closeBuyModal() { document.getElementById("buyOverlay").classList.remov
 function openSellModal(teamName) {
   activeSellTeam = teamName;
   const myP = gameState.players[currentPlayer];
-  const h = myP.holdings.find(hh=>hh.team===teamName);
   const price = getPrice(teamName);
   const fee = getBrokerageFee(myP);
-  const maxShares = h ? Math.floor(h.shares) : 0;
+  const eligible = Math.floor(eligibleShares(teamName));
+  const total = Math.floor(totalShares(teamName));
+  const locked = total - eligible;
 
   document.getElementById("sellTeam").textContent = teamName;
   document.getElementById("sellPriceDisplay").textContent = `$${price.toFixed(2)}`;
-  document.getElementById("sellSharesDisplay").textContent = h?fmtS(h.shares):"0";
-  document.getElementById("sellAmtInput").value = h?Math.round(h.shares):"";
-  document.getElementById("sellHoldWarn").style.display="none";
-  document.getElementById("sellWarnEl").style.display="none";
-  document.getElementById("sellConfirmBtn").disabled=false;
-  document.getElementById("sellMaxHint").textContent = maxShares > 0
-    ? `Max: ${maxShares.toLocaleString()} shares · Net proceeds: ${fmt(maxShares*price - fee)} (after ${fmt(fee)} fee)`
-    : "";
-  if (h&&!canSell(h)){
-    document.getElementById("sellHoldWarn").style.display="block";
-    document.getElementById("sellHoldWarn").textContent=`Hold period not met — ${roundsLeft(h)} more round(s) required.`;
-    document.getElementById("sellConfirmBtn").disabled=true;
+  document.getElementById("sellSharesDisplay").textContent = fmtS(total);
+  document.getElementById("sellAmtInput").value = eligible > 0 ? eligible : "";
+  document.getElementById("sellHoldWarn").style.display = "none";
+  document.getElementById("sellWarnEl").style.display = "none";
+  document.getElementById("sellConfirmBtn").disabled = eligible <= 0;
+
+  if (eligible <= 0) {
+    document.getElementById("sellHoldWarn").style.display = "block";
+    document.getElementById("sellHoldWarn").textContent = `Hold period not met — ${minRoundsLeft(teamName)} more round(s) required.`;
+  } else if (locked > 0) {
+    document.getElementById("sellHoldWarn").style.display = "block";
+    document.getElementById("sellHoldWarn").textContent = `${fmtS(locked)} shares from your recent purchase are locked for ${minRoundsLeft(teamName)} more round(s). Max sellable: ${fmtS(eligible)} shares.`;
+    document.getElementById("sellHoldWarn").style.color = "var(--accent)";
   }
+
+  document.getElementById("sellMaxHint").textContent = eligible > 0
+    ? `Max sellable: ${fmtS(eligible)} shares · Net proceeds: ${fmt(eligible * price - fee)} (after ${fmt(fee)} fee)`
+    : "";
   updateSellSummary();
   document.getElementById("sellOverlay").classList.add("open");
 }
 
 function setSellMax() {
-  const myP = gameState.players[currentPlayer];
-  const h = myP.holdings.find(hh=>hh.team===activeSellTeam);
-  if (h) {
-    document.getElementById("sellAmtInput").value = Math.floor(h.shares);
+  const eligible = Math.floor(eligibleShares(activeSellTeam));
+  if (eligible > 0) {
+    document.getElementById("sellAmtInput").value = eligible;
     updateSellSummary();
   }
 }
 
 function updateSellSummary() {
   const myP = gameState.players[currentPlayer];
-  const h = myP.holdings.find(hh=>hh.team===activeSellTeam);
-  if (!h) return;
   const shares = parseFloat(document.getElementById("sellAmtInput").value)||0;
   const price = getPrice(activeSellTeam);
   const fee = getBrokerageFee(myP);
   const net = shares*price - fee;
+  const eligible = Math.floor(eligibleShares(activeSellTeam));
+
   document.getElementById("sValue").textContent = shares>0?fmt(shares*price):"—";
   document.getElementById("sFee").textContent = fmt(fee);
   document.getElementById("sNet").textContent = shares>0?fmt(net):"—";
@@ -1480,8 +1529,8 @@ function updateSellSummary() {
   const warn = document.getElementById("sellWarnEl");
   warn.style.display = "none";
   if (shares > 0) {
-    if (shares > Math.ceil(h.shares)) {
-      warn.style.display="block"; warn.textContent=`You only have ${Math.floor(h.shares)} shares`;
+    if (shares > eligible) {
+      warn.style.display="block"; warn.textContent=`You can only sell ${fmtS(eligible)} shares — the rest are still in their hold period`;
       document.getElementById("sellConfirmBtn").disabled=true;
     } else if (net < 0) {
       warn.style.display="block"; warn.textContent=`Fee exceeds sale value — try selling more shares`;
