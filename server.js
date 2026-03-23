@@ -663,29 +663,28 @@ Respond ONLY with a valid JSON object in this exact format (no markdown, no expl
         const price = getPrice(trade.team, ladder);
         if (!price) return;
         const maxInvest = getTotal(player, ladder) * PORTFOLIO_CAP;
-        const existing = player.holdings.find(h => h.team === trade.team);
-        const existingVal = existing ? existing.shares * price : 0;
+        const existingTranches = player.holdings.filter(h => h.team === trade.team);
+        const existingVal = existingTranches.reduce((s,h) => s + h.shares * price, 0);
         const available = Math.min(trade.amount, player.cash - fee, maxInvest - existingVal);
         if (available < 50 || player.cash < fee + available) return;
         const shares = available / price;
         player.cash -= (available + fee);
-        if (existing) {
-          const tot = existing.shares + shares;
-          existing.buyPrice = (existing.shares * existing.buyPrice + shares * price) / tot;
-          existing.shares = tot;
-        } else {
-          player.holdings.push({ team: trade.team, shares, buyPrice: price, buyRound: round });
-        }
+        // Always push new tranche
+        player.holdings.push({ team: trade.team, shares, buyPrice: price, buyRound: round });
         player.tradesThisRound++;
         player.tradeLog.push({ type:"buy", team:trade.team, value:shares*price, fee, round });
       } else if (trade.type === "sell") {
-        const h = player.holdings.find(hh => hh.team === trade.team);
-        if (!h || !canSellHolding(h, round)) return;
-        const price = getPrice(h.team, ladder);
-        player.cash += h.shares * price - fee;
-        player.holdings = player.holdings.filter(hh => hh.team !== trade.team);
+        const eligibleTranches = player.holdings.filter(hh => hh.team === trade.team && canSellHolding(hh, round));
+        if (!eligibleTranches.length) return;
+        const price = getPrice(trade.team, ladder);
+        const totalEligible = eligibleTranches.reduce((s,h) => s+h.shares, 0);
+        // Sell all eligible tranches
+        let sellVal = 0;
+        eligibleTranches.forEach(h => { sellVal += h.shares * price; h.shares = 0; });
+        player.holdings = player.holdings.filter(hh => hh.shares > 0);
+        player.cash += sellVal - fee;
         player.tradesThisRound++;
-        player.tradeLog.push({ type:"sell", team:h.team, value:h.shares*price, fee, round });
+        player.tradeLog.push({ type:"sell", team:trade.team, value:sellVal, fee, round });
       }
     });
   });
@@ -720,22 +719,17 @@ app.post("/api/buy", async (req, res) => {
 
   const total = getTotal(player, gs.ladder);
   const maxInvest = total * PORTFOLIO_CAP;
-  const existing = player.holdings.find(h => h.team === teamName);
-  const existingVal = existing ? existing.shares * price : 0;
+  const existingTranches = player.holdings.filter(h => h.team === teamName);
+  const existingVal = existingTranches.reduce((s, h) => s + h.shares * price, 0);
   if (existingVal + cost > maxInvest)
     return res.status(400).json({ error: `25% cap exceeded. Max ${Math.floor(maxInvest - existingVal)} more in this team.` });
 
   const tradeId = Date.now() + "_" + Math.random().toString(36).slice(2,7);
-  const wasNewHolding = !existing;
+  const wasNewHolding = existingTranches.length === 0;
   player.cash -= (cost + fee);
   player.tradesThisRound++;
-  if (existing) {
-    const tot = existing.shares + shares;
-    existing.buyPrice = (existing.shares * existing.buyPrice + shares * price) / tot;
-    existing.shares = tot;
-  } else {
-    player.holdings.push({ team: teamName, shares, buyPrice: price, buyRound: gs.round });
-  }
+  // Always store as a new tranche to preserve individual buyRound for hold period enforcement
+  player.holdings.push({ team: teamName, shares, buyPrice: price, buyRound: gs.round });
   player.tradeLog.push({ id:tradeId, type:"buy", team:teamName, value:cost, fee, round:gs.round, shares, price, wasNewHolding });
 
   await saveState(gs);
@@ -752,32 +746,51 @@ app.post("/api/sell", async (req, res) => {
     return res.status(400).json({ error: "Trade window closed — round has started." });
 
   const player = gs.players[playerName];
-  const h = player.holdings.find(hh => hh.team === teamName);
-  if (!h) return res.status(400).json({ error: "No holding found" });
-  if (!canSellHolding(h, gs.round))
-    return res.status(400).json({ error: `Hold period not met. ${(h.buyRound === 0 ? PRESEASON_HOLD : MIN_HOLD) - (gs.round - h.buyRound)} more round(s) required.` });
+  const tranches = player.holdings.filter(hh => hh.team === teamName);
+  if (tranches.length === 0) return res.status(400).json({ error: "No holding found" });
+
+  // Only tranches that have met the hold period can be sold
+  const eligibleTranches = tranches.filter(h => canSellHolding(h, gs.round));
+  const eligibleShares = eligibleTranches.reduce((s, h) => s + h.shares, 0);
+  if (eligibleShares <= 0) {
+    const roundsNeeded = Math.min(...tranches.map(h => (h.buyRound === 0 ? PRESEASON_HOLD : MIN_HOLD) - (gs.round - h.buyRound)));
+    return res.status(400).json({ error: `Hold period not met. ${Math.max(1, roundsNeeded)} more round(s) required.` });
+  }
 
   const tradeId = Date.now() + "_" + Math.random().toString(36).slice(2,7);
-  const sellShares = Math.min(parseFloat(shares), h.shares);
+  const requestedShares = parseFloat(shares);
+  const sellShares = Math.min(requestedShares, eligibleShares);
   const price = getPrice(teamName, gs.ladder);
   const fee = getBrokerageFee(player, gs.ladder);
   const net = sellShares * price - fee;
-  const prevBuyPrice = h.buyPrice;
-  const prevBuyRound = h.buyRound;
+
+  // Deduct shares from eligible tranches FIFO (oldest first)
+  let remaining = sellShares;
+  const sortedEligible = [...eligibleTranches].sort((a, b) => a.buyRound - b.buyRound);
+  for (const tranche of sortedEligible) {
+    if (remaining <= 0) break;
+    const deduct = Math.min(remaining, tranche.shares);
+    tranche.shares -= deduct;
+    remaining -= deduct;
+  }
+
+  // Remove empty tranches and handle dust
+  player.holdings = player.holdings.filter(hh => {
+    if (hh.team !== teamName) return true;
+    if (hh.shares <= 0) return false;
+    // Clean up dusty tranche
+    if (hh.shares * price < price) {
+      player.cash += hh.shares * price;
+      return false;
+    }
+    return true;
+  });
+
+  const prevBuyPrice = sortedEligible[0]?.buyPrice || 0;
+  const prevBuyRound = sortedEligible[0]?.buyRound || 0;
 
   player.cash += net;
   player.tradesThisRound++;
-  if (sellShares >= h.shares) {
-    player.holdings = player.holdings.filter(hh => hh.team !== teamName);
-  } else {
-    h.shares -= sellShares;
-    // Clean up dusty holding — if remaining value is less than one share price, remove it
-    const remainingValue = h.shares * price;
-    if (remainingValue < price) {
-      player.cash += remainingValue; // refund the dust
-      player.holdings = player.holdings.filter(hh => hh.team !== teamName);
-    }
-  }
   player.tradeLog.push({ id:tradeId, type:"sell", team:teamName, value:sellShares*price, fee, round:gs.round, shares:sellShares, price, prevBuyPrice, prevBuyRound });
 
   await saveState(gs);
@@ -889,6 +902,9 @@ app.post("/api/admin/advance", async (req, res) => {
       total: getTotal(gs.players[n], gs.ladder)
     };
   });
+
+  // Save ladder snapshot at round start — used for "change since round started" column
+  gs.snapshotLadder = JSON.parse(JSON.stringify(gs.ladder));
 
   gs.tradeDeadline = null;
   gs.status = "trading";
