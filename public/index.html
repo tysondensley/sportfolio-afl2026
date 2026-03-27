@@ -1276,13 +1276,13 @@ function drawHistoryChart(gs, focusPlayer){
 
   if(legendEl){
     legendEl.innerHTML=HUMAN_PLAYERS.map(n=>
-      '<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.68rem;font-family:'DM Mono',monospace">'+
-      '<span style="width:18px;height:2.5px;background:'+PLAYER_COLORS[n]+';display:inline-block;border-radius:2px"></span>'+
-      '<span style="color:'+(n===focusPlayer?"var(--accent)":"var(--muted)")+'">'+n+'</span></span>'
+      `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.68rem;font-family:'DM Mono',monospace">`+
+      `<span style="width:18px;height:2.5px;background:${PLAYER_COLORS[n]};display:inline-block;border-radius:2px"></span>`+
+      `<span style="color:${n===focusPlayer?"var(--accent)":"var(--muted)"}">${n}</span></span>`
     ).join("")+
-    '<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.68rem;font-family:'DM Mono',monospace">'+
-    '<span style="width:18px;height:1px;background:#2a3a55;display:inline-block;border-radius:2px"></span>'+
-    '<span style="color:var(--dim)">AI (dimmed)</span></span>';
+    `<span style="display:inline-flex;align-items:center;gap:.3rem;font-size:.68rem;font-family:'DM Mono',monospace">`+
+    `<span style="width:18px;height:1px;background:#2a3a55;display:inline-block;border-radius:2px"></span>`+
+    `<span style="color:var(--dim)">AI (dimmed)</span></span>`;
   }
 
   if(tooltip&&points.length>0){
