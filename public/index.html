@@ -1066,11 +1066,13 @@ function renderPortfolio(){
     const holdPill=ineligible.length>0?`<span class="hold-tag" style="font-size:.55rem;padding:.1rem .3rem;margin-left:3px">HOLD ${minHold}R</span>`:"";
     const pctOfTotal=Math.round(totalVal/vTotal*100);
     const avgBuy=totalCost>0?(totalCost/totalShrs).toFixed(2):tranches[0].buyPrice.toFixed(2);
-    const sellBtn=canAct
-      ?(canSellAny
-        ?`<td style="text-align:right;padding-right:6px"><button class="sell-btn" style="font-size:.62rem;padding:.18rem .45rem" onclick="openSellModal('${teamName}')">SELL</button></td>`
-        :`<td style="text-align:right;padding-right:6px"><span style="font-size:.62rem;color:var(--dim);font-family:'DM Mono',monospace">HOLD ${minHold}R</span></td>`)
-      :"<td></td>";
+    const sellBtn=!isOpen
+      ?`<td style="text-align:right;padding-right:6px"><span style="font-size:.58rem;color:var(--dim);font-family:'DM Mono',monospace">locked</span></td>`
+      :canAct
+        ?(canSellAny
+          ?`<td style="text-align:right;padding-right:6px"><button class="sell-btn" style="font-size:.62rem;padding:.18rem .45rem" onclick="openSellModal('${teamName}')">SELL</button></td>`
+          :`<td style="text-align:right;padding-right:6px"><span style="font-size:.62rem;color:var(--dim);font-family:'DM Mono',monospace">HOLD ${minHold}R</span></td>`)
+      :`<td style="text-align:right;padding-right:6px"><span style="font-size:.58rem;color:var(--dim);font-family:'DM Mono',monospace">locked</span></td>`;
     return `<tr>
       <td style="padding:6px 4px 6px 8px">${teamLogoEl(teamName,20)}</td>
       <td style="padding:6px 4px">
@@ -1091,7 +1093,7 @@ function renderPortfolio(){
     <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:600;font-size:.72rem;color:var(--blue);padding:6px 4px">${fmt(vP.cash)}</td>
     <td style="text-align:right;font-family:'DM Mono',monospace;font-size:.66rem;color:var(--muted);padding:6px 4px">${cashPct}%</td>
     <td style="text-align:right;font-size:.66rem;color:var(--dim);padding:6px 4px">—</td>
-    ${canAct?"<td></td>":""}
+    <td></td>
   </tr>`;
 
   const colHeader=canAct
@@ -1106,7 +1108,7 @@ function renderPortfolio(){
       </div>
       <table style="width:100%;border-collapse:collapse;table-layout:fixed">
         <colgroup>
-          <col style="width:28px"><col><col style="width:56px"><col style="width:34px"><col style="width:46px">${canAct?`<col style="width:52px">`:""}
+          <col style="width:28px"><col><col style="width:56px"><col style="width:34px"><col style="width:46px"><col style="width:52px">
         </colgroup>
         <thead><tr style="background:var(--bg)">
           <th style="font-size:.58rem;text-transform:uppercase;letter-spacing:.07em;color:var(--dim);padding:3px 4px;border-bottom:1px solid var(--border)"></th>
@@ -1114,7 +1116,7 @@ function renderPortfolio(){
           <th style="font-size:.58rem;text-transform:uppercase;letter-spacing:.07em;color:var(--dim);padding:3px 4px;border-bottom:1px solid var(--border);text-align:right">Value</th>
           <th style="font-size:.58rem;text-transform:uppercase;letter-spacing:.07em;color:var(--dim);padding:3px 4px;border-bottom:1px solid var(--border);text-align:right">%</th>
           <th style="font-size:.58rem;text-transform:uppercase;letter-spacing:.07em;color:var(--dim);padding:3px 4px;border-bottom:1px solid var(--border);text-align:right">P&L</th>
-          ${canAct?`<th style="border-bottom:1px solid var(--border)"></th>`:""}
+          <th style="border-bottom:1px solid var(--border)"></th>
         </tr></thead>
         <tbody>${holdingRows}${cashRow}</tbody>
       </table>
@@ -1125,7 +1127,7 @@ function renderPortfolio(){
   const tradeLogHtml=(()=>{
     if(vP.tradeLog.length===0) return `<div style="padding:.75rem;font-size:.8rem;color:var(--muted);text-align:center">No trades yet.</div>`;
     return [...vP.tradeLog].reverse().slice(0,20).map(t=>{
-      const canUndo=t.id&&t.round===gameState.round&&vP.name===currentPlayer;
+      const canUndo=t.id&&t.round===gameState.round&&vP.name===currentPlayer&&canAct;
       const undoHtml=canUndo?`<button class="btn sm danger" style="margin-top:.3rem;font-size:.62rem;padding:.18rem .45rem" onclick="undoTrade('${t.id}')">&#8617; Undo</button>`:"";
       return `<div class="tlog-item"><div style="display:flex;align-items:center;gap:.35rem"><span class="tlog-type ${t.type==="buy"?"tlog-buy":"tlog-sell"}">${t.type.toUpperCase()}</span>${teamLogo(t.team,"team-logo-sm")}${t.team}</div><div style="text-align:right;font-family:'DM Mono',monospace"><div style="font-size:.78rem">${fmt(t.value)}</div><div style="font-size:.65rem;color:var(--muted)">${getRoundLabel(t.round)} · Fee ${fmt(t.fee)}</div>${undoHtml}</div></div>`;
     }).join("");
@@ -1136,22 +1138,22 @@ function renderPortfolio(){
     ${hiddenBanner}
 
     <div style="display:grid;grid-template-columns:repeat(4,1fr);background:var(--surface);border:1px solid var(--border);border-radius:10px;margin-bottom:.75rem;overflow:hidden">
-      <div style="padding:.6rem .8rem;border-right:1px solid var(--border)">
-        <div style="font-size:.55rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:.15rem;white-space:nowrap">Portfolio</div>
-        <div style="font-family:'DM Mono',monospace;font-size:.95rem;font-weight:600;color:${vChg>=0?"var(--up)":"var(--down)"}">${fmt(vTotal)}</div>
-        <div style="font-size:.6rem;color:${vChg>=0?"var(--up)":"var(--down)"}">${fmtP(vChg/10000*100)}</div>
+      <div style="padding:.5rem .7rem;border-right:1px solid var(--border)">
+        <div style="font-size:.52rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:.1rem;white-space:nowrap">Portfolio</div>
+        <div style="font-family:'DM Mono',monospace;font-size:.82rem;font-weight:600;color:${vChg>=0?"var(--up)":"var(--down)"}">${fmt(vTotal)}</div>
+        <div style="font-size:.58rem;color:${vChg>=0?"var(--up)":"var(--down)"}">${fmtP(vChg/10000*100)}</div>
       </div>
-      <div style="padding:.6rem .8rem;border-right:1px solid var(--border)">
-        <div style="font-size:.55rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:.15rem;white-space:nowrap">Cash</div>
-        <div style="font-family:'DM Mono',monospace;font-size:.95rem;font-weight:600;color:var(--blue)">${fmt(vP.cash)}</div>
+      <div style="padding:.5rem .7rem;border-right:1px solid var(--border)">
+        <div style="font-size:.52rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:.1rem;white-space:nowrap">Cash</div>
+        <div style="font-family:'DM Mono',monospace;font-size:.82rem;font-weight:600;color:var(--blue)">${fmt(vP.cash)}</div>
       </div>
-      <div style="padding:.6rem .8rem;border-right:1px solid var(--border)">
-        <div style="font-size:.55rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:.15rem;white-space:nowrap">Brokerage</div>
-        <div style="font-family:'DM Mono',monospace;font-size:.95rem;font-weight:600">${fmt(getBrokerageFee(vP))}</div>
+      <div style="padding:.5rem .7rem;border-right:1px solid var(--border)">
+        <div style="font-size:.52rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:.1rem;white-space:nowrap">Brokerage</div>
+        <div style="font-family:'DM Mono',monospace;font-size:.82rem;font-weight:600">${fmt(getBrokerageFee(vP))}</div>
       </div>
-      <div style="padding:.6rem .8rem">
-        <div style="font-size:.55rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:.15rem">Rank</div>
-        <div style="font-family:'DM Mono',monospace;font-size:.95rem;font-weight:600;color:var(--accent)">${rankStr}</div>
+      <div style="padding:.5rem .7rem">
+        <div style="font-size:.52rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:.1rem">Rank</div>
+        <div style="font-family:'DM Mono',monospace;font-size:.82rem;font-weight:600;color:var(--accent)">${rankStr}</div>
       </div>
     </div>
 
@@ -1163,7 +1165,7 @@ function renderPortfolio(){
         <div class="card" style="margin-bottom:.75rem">
           <div class="card-hd" style="padding:.6rem 1rem"><div class="card-title">Portfolio Breakdown</div></div>
           <div style="display:flex;align-items:center;gap:1rem;padding:.75rem 1rem">
-            <div id="pieChartWrap" style="flex-shrink:0;width:100px;height:100px"></div>
+            <div id="pieChartWrap" style="flex-shrink:0;width:100px;height:100px;overflow:hidden"></div>
             <div id="pieLegend" style="font-size:.72rem;line-height:1.8;flex:1"></div>
           </div>
         </div>
@@ -1193,7 +1195,7 @@ function drawPieChart(vP,vTotal){
   canvas.width=160;canvas.height=160;
   wrap.appendChild(canvas);
   const ctx=canvas.getContext("2d");
-  const cx=80,cy=80,r=72;
+  const cx=W/2,cy=H/2,r=Math.min(W,H)/2-4;
   const TEAM_COLORS=["#FFB400","#4da6ff","#00c97a","#ff4f6d","#a78bfa","#f97316","#06b6d4","#ec4899","#84cc16","#f59e0b","#10b981","#3b82f6","#ef4444","#8b5cf6","#14b8a6","#f43f5e","#22c55e","#6366f1"];
   const teamNames=[...new Set(vP.holdings.map(h=>h.team))];
   const slices=teamNames.map((teamName,i)=>{
