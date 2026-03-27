@@ -22,6 +22,11 @@ button:disabled{opacity:.3;cursor:not-allowed!important}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 .page{display:none}.page.active{display:block;animation:fadeIn .25s ease}
 
+/* TEAM LOGO */
+.team-logo{width:22px;height:22px;object-fit:contain;vertical-align:middle;margin-right:.35rem;flex-shrink:0}
+.team-logo-sm{width:18px;height:18px;object-fit:contain;vertical-align:middle;margin-right:.3rem;flex-shrink:0}
+.team-logo-md{width:28px;height:28px;object-fit:contain;vertical-align:middle;margin-right:.4rem;flex-shrink:0}
+
 /* LOGIN */
 .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:2rem;position:relative;z-index:1}
 .login-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:2.5rem;width:100%;max-width:400px;text-align:center}
@@ -550,6 +555,46 @@ const AI_PLAYERS = ["Alex","Jordan","Casey","Riley","Morgan","Quinn","Blake"];
 const ALL_PLAYERS = [...HUMAN_PLAYERS,...AI_PLAYERS];
 const PORTFOLIO_CAP = 0.25;
 
+// ── TEAM LOGOS ────────────────────────────────────────────────
+const LOGOS = {
+  "Adelaide":         "https://i0.wp.com/www.footyalmanac.com.au/wp-content/uploads/Adelaide.png",
+  "Brisbane Lions":   "https://i0.wp.com/www.footyalmanac.com.au/wp-content/uploads/Brisbane.png",
+  "Carlton":          "https://i0.wp.com/www.footyalmanac.com.au/wp-content/uploads/Carlton1.png",
+  "Collingwood":      "https://i0.wp.com/www.footyalmanac.com.au/wp-content/uploads/Collingwood.png",
+  "Essendon":         "https://i0.wp.com/www.footyalmanac.com.au/wp-content/uploads/Essendon1.png",
+  "Fremantle":        "https://i0.wp.com/www.footyalmanac.com.au/wp-content/uploads/Fremantle.png",
+  "Geelong":          "https://i0.wp.com/www.footyalmanac.com.au/wp-content/uploads/Geelong1.png",
+  "Gold Coast Suns":  "https://i0.wp.com/www.footyalmanac.com.au/wp-content/uploads/Gold-Coast.png",
+  "GWS Giants":       "https://i0.wp.com/www.footyalmanac.com.au/wp-content/uploads/GWS.png",
+  "Hawthorn":         "https://i0.wp.com/www.footyalmanac.com.au/wp-content/uploads/Hawthorn.jpg",
+  "Melbourne":        "https://i0.wp.com/www.footyalmanac.com.au/wp-content/uploads/Melbourne1.png",
+  "North Melbourne":  "https://i0.wp.com/www.footyalmanac.com.au/wp-content/uploads/North-Melbourne.png",
+  "Port Adelaide":    "https://i0.wp.com/www.footyalmanac.com.au/wp-content/uploads/Port-Adelaide.jpg",
+  "Richmond":         "https://i0.wp.com/www.footyalmanac.com.au/wp-content/uploads/Richmond.jpg",
+  "St Kilda":         "https://i0.wp.com/www.footyalmanac.com.au/wp-content/uploads/St.-Kilda1.png",
+  "Sydney Swans":     "https://i0.wp.com/www.footyalmanac.com.au/wp-content/uploads/Sydney1.png",
+  "West Coast":       "https://i0.wp.com/www.footyalmanac.com.au/wp-content/uploads/West-Coast1.png",
+  "Western Bulldogs": "https://i0.wp.com/www.footyalmanac.com.au/wp-content/uploads/Bulldogs1.png",
+};
+
+// Returns an <img> tag for a team logo, sized by class
+function teamLogo(name, cls) {
+  const url = LOGOS[name];
+  if (!url) return "";
+  return `<img src="${url}" alt="${name}" class="${cls||'team-logo'}" onerror="this.style.display='none'">`;
+}
+
+// Opponent chip — logo instead of emoji, same dimensions as before
+function oppChip(oppName, rLabel, isHome) {
+  const url = LOGOS[oppName];
+  const haColor = isHome ? "var(--up)" : "var(--muted)";
+  const haLabel = isHome ? "H" : "A";
+  const inner = url
+    ? `<img src="${url}" alt="${oppName}" style="width:16px;height:16px;object-fit:contain" onerror="this.style.display='none'">`
+    : oppName.slice(0,2);
+  return `<span class="opp-chip" data-tip="${rLabel} · vs ${oppName} (${isHome?'Home':'Away'})">${inner}<span style="font-size:.55rem;font-family:'DM Mono',monospace;color:${haColor};margin-left:.08rem">${haLabel}</span></span>`;
+}
+
 let gameState = null;
 let currentPlayer = null;
 let viewingPlayer = null;
@@ -623,7 +668,6 @@ async function refreshState() {
     gameState = data;
     renderAll();
     document.getElementById("syncDot").style.background = "var(--up)";
-    // Show live update time if ladder was updated by Squiggle
     if (data.liveUpdatedAt) {
       const t = new Date(data.liveUpdatedAt);
       const mins = Math.floor((Date.now() - t) / 60000);
@@ -743,7 +787,7 @@ function updateHeaderUI() {
   document.getElementById("mTrades").textContent = myP.tradesThisRound;
   document.getElementById("mNextFee").textContent = "Next fee: "+fmt(getBrokerageFee(myP));
 
-  // Render holdings summary table on market tab
+  // Holdings summary table on market tab
   const holdingsCard = document.getElementById("myHoldingsCard");
   const holdingsBody = document.getElementById("myHoldingsBody");
   const holdingsTotal = document.getElementById("myHoldingsTotal");
@@ -765,14 +809,13 @@ function updateHeaderUI() {
       const eligible = tranches.filter(h=>canSell(h)).reduce((s,h)=>s+h.shares,0);
       const locked = totalShrs - eligible;
       const pnlColor = pnl >= 0 ? "var(--up)" : "var(--down)";
-      const emoji = gs.ladder.find(t => t.name === teamName)?.emoji || "";
       const holdStatus = eligible > 0 && locked > 0
         ? `<span style="color:var(--accent);font-size:.72rem">${fmtS(locked)} locked</span>`
         : eligible > 0
           ? '<span style="color:var(--up);font-size:.72rem">✓ Can sell</span>'
           : `<span class="hold-tag">HOLD ${minRoundsLeft(teamName)}R</span>`;
       return `<tr>
-        <td><span style="margin-right:.4rem">${emoji}</span>${teamName}</td>
+        <td><span style="display:inline-flex;align-items:center">${teamLogo(teamName,'team-logo-sm')}${teamName}</span></td>
         <td style="text-align:right;font-family:'DM Mono',monospace;font-size:.78rem">${fmtS(totalShrs)}</td>
         <td style="text-align:right;font-family:'DM Mono',monospace;font-size:.78rem">$${price.toFixed(2)}</td>
         <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:600">${fmt(val)}</td>
@@ -806,15 +849,11 @@ function renderLadder() {
   const isOpen = gs.round<10;
   const deadline = gs.tradeDeadline ? new Date(gs.tradeDeadline).getTime() : null;
   const isLocked = deadline && Date.now() > deadline;
-  // During trading window, show snapshot holdings (end of last round); after lockout show live
   const displayP = (!isLocked && gs.round > 0 && gs.snapshot) ? gs.snapshot[currentPlayer] : myP;
 
   gs.ladder.forEach((team,idx) => {
     const pos = idx+1;
     const price = PRICE_SCALE[pos];
-    const deadline = gs.tradeDeadline ? new Date(gs.tradeDeadline).getTime() : null;
-    const isLocked = deadline && Date.now() > deadline;
-    // During lockout show change vs round-start ladder; during trading show change vs last round
     const compareLadder = isLocked && gs.snapshotLadder ? gs.snapshotLadder : gs.prevLadder;
     const prevPrice = compareLadder ? getPrice(team.name, compareLadder) : price;
     const chg = price - prevPrice;
@@ -844,12 +883,8 @@ function renderLadder() {
         } else {
           const isHome = match[0] === team.name;
           const opp = isHome ? match[1] : match[0];
-          const oppData = gs.ladder.find(t=>t.name===opp);
-          const emoji = oppData ? oppData.emoji : "?";
           const rLabel = r===1?"Opening Round":"R"+(r-1);
-          const haLabel = isHome ? "H" : "A";
-          const haColor = isHome ? "var(--up)" : "var(--muted)";
-          chips.push(`<span class="opp-chip" data-tip="${rLabel} · vs ${opp} (${isHome?'Home':'Away'})">${emoji}<span style="font-size:.55rem;font-family:'DM Mono',monospace;color:${haColor};margin-left:.08rem">${haLabel}</span></span>`);
+          chips.push(oppChip(opp, rLabel, isHome));
         }
       }
       upcomingHtml = chips.join("");
@@ -858,7 +893,7 @@ function renderLadder() {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td><span class="pos-badge ${posClass}">${pos}</span></td>
-      <td><span style="margin-right:.4rem">${team.emoji}</span><strong>${team.name}</strong>${interestNote}</td>
+      <td><span style="display:inline-flex;align-items:center">${teamLogo(team.name)}<strong>${team.name}</strong>${interestNote}</span></td>
       <td class="hide-mob mono" style="color:var(--muted)">${gs.round>0?`${team.wins}–${team.losses}–${team.draws}`:"—"}</td>
       <td class="hide-mob mono" style="color:var(--muted)">${gs.round>0?team.pts:"—"}</td>
       <td class="hide-mob mono" style="color:var(--muted)">${gs.round>0?team.pct.toFixed(1)+"%":"—"}</td>
@@ -877,7 +912,6 @@ function renderPortfolio() {
   const deadline = gs.tradeDeadline ? new Date(gs.tradeDeadline).getTime() : null;
   const isLocked = deadline && Date.now() > deadline;
   const useSnapshot = !isLocked && gs.round > 0 && gs.snapshot;
-  // Player tabs
   const tabs = document.getElementById("playerTabs");
   tabs.innerHTML = "";
   ALL_PLAYERS.forEach(name => {
@@ -891,7 +925,6 @@ function renderPortfolio() {
 
   const isViewingSelf = viewingPlayer === currentPlayer;
   const liveP = gs.players[viewingPlayer];
-  // During trading window, show snapshot for other players; always show live for yourself
   const snapP = useSnapshot && !isViewingSelf && gs.snapshot && gs.snapshot[viewingPlayer];
   const vP = snapP ? {
     ...liveP,
@@ -927,7 +960,6 @@ function renderPortfolio() {
           <div class="card-hd"><div class="card-title">Holdings</div></div>
           <div class="card-body">
             ${vP.holdings.length===0?`<div class="empty-state"><div class="empty-icon">📊</div>No holdings yet.</div>`:(()=>{
-              // Group tranches by team
               const teams = [...new Set(vP.holdings.map(h=>h.team))];
               return teams.map(teamName => {
                 const tranches = vP.holdings.filter(h=>h.team===teamName);
@@ -946,7 +978,7 @@ function renderPortfolio() {
                 return `
                   <div class="holding">
                     <div>
-                      <div style="font-weight:600;font-size:.88rem">${teamName}</div>
+                      <div style="font-weight:600;font-size:.88rem;display:flex;align-items:center">${teamLogo(teamName,'team-logo-md')}${teamName}</div>
                       <div style="font-size:.68rem;color:var(--muted);font-family:'DM Mono',monospace;margin-top:.1rem">${trancheDetail}</div>
                       ${locked>0?`<div style="font-size:.65rem;color:var(--accent);margin-top:.1rem">${fmtS(locked)} shares locked · ${fmtS(eligible)} sellable now</div>`:""}
                     </div>
@@ -974,7 +1006,7 @@ function renderPortfolio() {
             return [...vP.tradeLog].reverse().slice(0,20).map(t=>{
               const canUndo = t.id && t.round===gameState.round && vP.name===currentPlayer;
               const undoHtml = canUndo ? '<button class="btn sm danger" style="margin-top:.3rem;font-size:.62rem;padding:.2rem .5rem" onclick="undoTrade(\''+t.id+'\')">↩ Undo</button>' : '';
-              return '<div class="tlog-item"><div><span class="tlog-type '+(t.type==="buy"?"tlog-buy":"tlog-sell")+'">'+ t.type.toUpperCase()+'</span>'+t.team+'</div><div style="text-align:right;font-family:DM Mono,monospace"><div>'+fmt(t.value)+'</div><div style="font-size:.68rem;color:var(--muted)">'+getRoundLabel(t.round)+' · Fee '+fmt(t.fee)+'</div>'+undoHtml+'</div></div>';
+              return '<div class="tlog-item"><div style="display:flex;align-items:center;gap:.4rem"><span class="tlog-type '+(t.type==="buy"?"tlog-buy":"tlog-sell")+'">'+ t.type.toUpperCase()+'</span>'+teamLogo(t.team,'team-logo-sm')+t.team+'</div><div style="text-align:right;font-family:DM Mono,monospace"><div>'+fmt(t.value)+'</div><div style="font-size:.68rem;color:var(--muted)">'+getRoundLabel(t.round)+' · Fee '+fmt(t.fee)+'</div>'+undoHtml+'</div></div>';
             }).join('');
           })()}
         </div>
@@ -982,7 +1014,6 @@ function renderPortfolio() {
     </div>
   `;
 
-  // Draw pie chart after DOM updates
   setTimeout(() => drawPieChart(vP, vTotal), 50);
 }
 
@@ -996,13 +1027,14 @@ function drawPieChart(vP, vTotal) {
   const ctx = canvas.getContext("2d");
   const cx = 80, cy = 80, r = 72;
 
-  // Build slices
   const slices = [];
   const TEAM_COLORS = ["#FFB400","#4da6ff","#00c97a","#ff4f6d","#a78bfa","#f97316","#06b6d4","#ec4899","#84cc16","#f59e0b","#10b981","#3b82f6","#ef4444","#8b5cf6","#14b8a6","#f43f5e","#22c55e","#6366f1"];
-  vP.holdings.forEach((h, i) => {
-    const price = getPrice(h.team);
-    const val = h.shares * price;
-    slices.push({ label: h.team, val, color: TEAM_COLORS[i % TEAM_COLORS.length] });
+  // Group by team name for pie (merge tranches)
+  const teamNames = [...new Set(vP.holdings.map(h => h.team))];
+  teamNames.forEach((teamName, i) => {
+    const tranches = vP.holdings.filter(h => h.team === teamName);
+    const val = tranches.reduce((s,h) => s + h.shares * getPrice(h.team), 0);
+    slices.push({ label: teamName, val, color: TEAM_COLORS[i % TEAM_COLORS.length] });
   });
   if (vP.cash > 0) slices.push({ label: "Cash", val: vP.cash, color: "#4da6ff" });
 
@@ -1024,12 +1056,14 @@ function drawPieChart(vP, vTotal) {
     startAngle += sweep;
   });
 
-  // Legend
+  // Legend with logos
   const legend = document.getElementById("pieLegend");
   if (legend) {
     legend.innerHTML = slices.map(s => `
       <div style="display:flex;align-items:center;gap:.4rem">
-        <span style="width:9px;height:9px;border-radius:2px;background:${s.color};display:inline-block;flex-shrink:0"></span>
+        ${s.label !== "Cash"
+          ? teamLogo(s.label, 'team-logo-sm')
+          : `<span style="width:9px;height:9px;border-radius:2px;background:${s.color};display:inline-block;flex-shrink:0"></span>`}
         <span style="color:var(--muted)">${s.label}</span>
         <span style="margin-left:auto;font-family:'DM Mono',monospace;color:var(--text)">${Math.round(s.val/vTotal*100)}%</span>
       </div>`).join("");
@@ -1066,14 +1100,14 @@ function renderLeaderboard() {
     list.appendChild(div);
   });
 
-  // Top movers
+  // Top movers — with logos
   const movEl = document.getElementById("topMovers");
   if (!gs.prevLadder) { movEl.innerHTML=`<div class="empty-state"><div class="empty-icon">📊</div>Advance to Round 1.</div>`; }
   else {
-    const movers = gs.ladder.map((t,i)=>({name:t.name,emoji:t.emoji,chg:(gs.prevLadder.findIndex(p=>p.name===t.name))-i,pos:i+1})).sort((a,b)=>Math.abs(b.chg)-Math.abs(a.chg)).slice(0,6);
+    const movers = gs.ladder.map((t,i)=>({name:t.name,chg:(gs.prevLadder.findIndex(p=>p.name===t.name))-i,pos:i+1})).sort((a,b)=>Math.abs(b.chg)-Math.abs(a.chg)).slice(0,6);
     movEl.innerHTML = movers.map(m=>`
       <div style="display:flex;justify-content:space-between;align-items:center;padding:.4rem 0;border-bottom:1px solid rgba(30,45,69,.3);font-size:.82rem">
-        <div>${m.emoji} ${m.name}</div>
+        <div style="display:flex;align-items:center">${teamLogo(m.name,'team-logo-sm')}${m.name}</div>
         <div style="display:flex;gap:.75rem;align-items:center">
           <span style="font-family:'DM Mono',monospace;font-size:.75rem;color:${m.chg>0?"var(--up)":m.chg<0?"var(--down)":"var(--muted)"}">${m.chg>0?"▲":"▼"} ${Math.abs(m.chg)} places</span>
           <span style="font-family:'DM Mono',monospace;color:var(--accent);font-size:.75rem">$${PRICE_SCALE[m.pos].toFixed(2)}</span>
@@ -1104,7 +1138,7 @@ function renderAdmin() {
     const div = document.createElement("div");
     div.className = "admin-row";
     div.innerHTML = `
-      <div style="min-width:130px">${team.emoji} <strong>${team.name}</strong></div>
+      <div style="min-width:150px;display:flex;align-items:center">${teamLogo(team.name,'team-logo-sm')}<strong>${team.name}</strong></div>
       <div style="display:flex;align-items:center;gap:.35rem;flex-wrap:wrap">
         <span style="font-size:.65rem;color:var(--muted)">W</span><input class="admin-input" id="w_${team.name.replace(/ /g,'_')}" type="number" min="0" value="${team.wins}">
         <span style="font-size:.65rem;color:var(--muted)">L</span><input class="admin-input" id="l_${team.name.replace(/ /g,'_')}" type="number" min="0" value="${team.losses}">
@@ -1115,7 +1149,6 @@ function renderAdmin() {
     inputs.appendChild(div);
   });
 
-  // Populate deadline input
   const dlDateInput = document.getElementById("deadlineDateInput");
   const dlTimeInput = document.getElementById("deadlineTimeInput");
   const dlStatus = document.getElementById("deadlineStatus");
@@ -1142,49 +1175,45 @@ function renderAdmin() {
       <span class="mono">${fmt(p.val)}</span>
     </div>`).join("");
 
-  // Fixtures - only build if not already present
   const fixtureEl = document.getElementById("fixtureInputs");
-  if (fixtureEl.children.length === 0) {
-  const teamNames = gs.ladder.map(t=>t.name);
-  const teamOptions = `<option value="">— bye —</option>`+teamNames.map(n=>`<option value="${n}">${n}</option>`).join("");
-  const fixtures = gs.fixtures || {};
-  const ROUND_LABELS = ["Opening Round","Round 1","Round 2","Round 3","Round 4","Round 5","Round 6","Round 7","Round 8","Round 9"];
-  for (let r=1; r<=10; r++) {
-    const rLabel = ROUND_LABELS[r-1];
-    const header = document.createElement("div");
-    header.style.cssText = "font-family:'Bebas Neue',sans-serif;font-size:.8rem;letter-spacing:.1em;color:var(--accent);margin:1rem 0 .4rem";
-    header.textContent = rLabel;
-    fixtureEl.appendChild(header);
-    const roundFixtures = fixtures[r] || Array(9).fill(null).map(()=>["",""]);
-    for (let m=0; m<9; m++) {
-      const pair = roundFixtures[m] || ["",""];
-      const row = document.createElement("div");
-      row.style.cssText = "display:flex;align-items:center;gap:.5rem;margin-bottom:.3rem";
-      row.innerHTML = `
-        <span style="font-size:.65rem;color:var(--muted);width:20px;text-align:right">${m+1}.</span>
-        <select class="fix-select" id="fix_${r}_${m}_0">${teamOptions}</select>
-        <span style="font-size:.7rem;color:var(--muted)">vs</span>
-        <select class="fix-select" id="fix_${r}_${m}_1">${teamOptions}</select>
-      `;
-      fixtureEl.appendChild(row);
-      if (pair[0]) document.querySelector(`#fix_${r}_${m}_0`)?.setAttribute("data-val", pair[0]);
-      if (pair[1]) document.querySelector(`#fix_${r}_${m}_1`)?.setAttribute("data-val", pair[1]);
-    }
-  }
-  // Set saved values after DOM is ready
-  setTimeout(()=>{
+  if (fixtureEl && fixtureEl.children.length === 0) {
+    const teamNames = gs.ladder.map(t=>t.name);
+    const teamOptions = `<option value="">— bye —</option>`+teamNames.map(n=>`<option value="${n}">${n}</option>`).join("");
+    const fixtures = gs.fixtures || {};
+    const ROUND_LABELS = ["Opening Round","Round 1","Round 2","Round 3","Round 4","Round 5","Round 6","Round 7","Round 8","Round 9"];
     for (let r=1; r<=10; r++) {
-      const roundFixtures = fixtures[r] || [];
+      const rLabel = ROUND_LABELS[r-1];
+      const header = document.createElement("div");
+      header.style.cssText = "font-family:'Bebas Neue',sans-serif;font-size:.8rem;letter-spacing:.1em;color:var(--accent);margin:1rem 0 .4rem";
+      header.textContent = rLabel;
+      fixtureEl.appendChild(header);
+      const roundFixtures = fixtures[r] || Array(9).fill(null).map(()=>["",""]);
       for (let m=0; m<9; m++) {
         const pair = roundFixtures[m] || ["",""];
-        const s0 = document.getElementById(`fix_${r}_${m}_0`);
-        const s1 = document.getElementById(`fix_${r}_${m}_1`);
-        if (s0 && pair[0]) s0.value = pair[0];
-        if (s1 && pair[1]) s1.value = pair[1];
+        const row = document.createElement("div");
+        row.style.cssText = "display:flex;align-items:center;gap:.5rem;margin-bottom:.3rem";
+        row.innerHTML = `
+          <span style="font-size:.65rem;color:var(--muted);width:20px;text-align:right">${m+1}.</span>
+          <select class="fix-select" id="fix_${r}_${m}_0">${teamOptions}</select>
+          <span style="font-size:.7rem;color:var(--muted)">vs</span>
+          <select class="fix-select" id="fix_${r}_${m}_1">${teamOptions}</select>
+        `;
+        fixtureEl.appendChild(row);
       }
     }
-  }, 50);
-  } // end if fixtureEl.children.length === 0
+    setTimeout(()=>{
+      for (let r=1; r<=10; r++) {
+        const roundFixtures = (gs.fixtures||{})[r] || [];
+        for (let m=0; m<9; m++) {
+          const pair = roundFixtures[m] || ["",""];
+          const s0 = document.getElementById(`fix_${r}_${m}_0`);
+          const s1 = document.getElementById(`fix_${r}_${m}_1`);
+          if (s0 && pair[0]) s0.value = pair[0];
+          if (s1 && pair[1]) s1.value = pair[1];
+        }
+      }
+    }, 50);
+  }
 }
 
 // ── ADMIN ACTIONS ────────────────────────────────────────────
@@ -1397,7 +1426,7 @@ function openBuyModal(teamName) {
   const maxByCash = Math.max(0, Math.floor(myP.cash - fee));
   const maxAmt = Math.min(maxByPortfolioCap, maxByCash);
 
-  document.getElementById("buyTeam").textContent = teamName;
+  document.getElementById("buyTeam").innerHTML = teamLogo(teamName) + teamName;
   document.getElementById("buyingAs").textContent = currentPlayer;
   document.getElementById("buyPriceDisplay").textContent = `$${price.toFixed(2)}`;
   document.getElementById("buyCashDisplay").textContent = fmt(myP.cash);
@@ -1464,7 +1493,6 @@ async function submitBuy() {
     renderAll();
     showToast("success","Buy confirmed",`${Math.floor(data.shares).toLocaleString()} shares in ${activeBuyTeam} for ${fmt(data.cost)}`);
   } catch(e) {
-    console.error("Buy error:", e, e.stack);
     showToast("error","Trade failed",e.message);
     document.getElementById("buyConfirmBtn").disabled=false;
   }
@@ -1482,7 +1510,7 @@ function openSellModal(teamName) {
   const total = Math.floor(totalShares(teamName));
   const locked = total - eligible;
 
-  document.getElementById("sellTeam").textContent = teamName;
+  document.getElementById("sellTeam").innerHTML = teamLogo(teamName) + teamName;
   document.getElementById("sellPriceDisplay").textContent = `$${price.toFixed(2)}`;
   document.getElementById("sellSharesDisplay").textContent = fmtS(total);
   document.getElementById("sellAmtInput").value = eligible > 0 ? eligible : "";
