@@ -726,11 +726,12 @@ app.post("/api/buy", async (req, res) => {
 
   const tradeId = Date.now() + "_" + Math.random().toString(36).slice(2,7);
   const wasNewHolding = existingTranches.length === 0;
+  const cashBefore = player.cash; // snapshot cash before deducting
   player.cash -= (cost + fee);
   player.tradesThisRound++;
   // Always store as a new tranche to preserve individual buyRound for hold period enforcement
   player.holdings.push({ team: teamName, shares, buyPrice: price, buyRound: gs.round });
-  player.tradeLog.push({ id:tradeId, type:"buy", team:teamName, value:cost, fee, round:gs.round, shares, price, wasNewHolding });
+  player.tradeLog.push({ id:tradeId, type:"buy", team:teamName, value:cost, fee, round:gs.round, shares, price, wasNewHolding, cashBefore });
 
   await saveState(gs);
   res.json({ success: true, shares, cost, fee, state: gs });
@@ -789,9 +790,10 @@ app.post("/api/sell", async (req, res) => {
   const prevBuyPrice = sortedEligible[0]?.buyPrice || 0;
   const prevBuyRound = sortedEligible[0]?.buyRound || 0;
 
+  const cashBefore = player.cash; // snapshot cash before adding proceeds
   player.cash += net;
   player.tradesThisRound++;
-  player.tradeLog.push({ id:tradeId, type:"sell", team:teamName, value:sellShares*price, fee, round:gs.round, shares:sellShares, price, prevBuyPrice, prevBuyRound });
+  player.tradeLog.push({ id:tradeId, type:"sell", team:teamName, value:sellShares*price, fee, round:gs.round, shares:sellShares, price, prevBuyPrice, prevBuyRound, cashBefore });
 
   await saveState(gs);
   res.json({ success: true, net, fee, state: gs });
@@ -810,7 +812,7 @@ app.post("/api/undo", async (req, res) => {
   if (trade.round !== gs.round) return res.status(400).json({ error: "Can only undo trades from the current round" });
 
   if (trade.type === "buy") {
-    // Reverse a buy: remove shares, refund cash + fee
+    // Reverse a buy: remove shares, restore cash to pre-trade snapshot
     const h = player.holdings.find(hh => hh.team === trade.team);
     if (!h) return res.status(400).json({ error: "Holding not found" });
     if (trade.wasNewHolding) {
@@ -819,10 +821,10 @@ app.post("/api/undo", async (req, res) => {
       h.shares -= trade.shares;
       if (h.shares <= 0) player.holdings = player.holdings.filter(hh => hh.team !== trade.team);
     }
-    player.cash += (trade.value + trade.fee);
+    player.cash = trade.cashBefore !== undefined ? trade.cashBefore : player.cash + (trade.value + trade.fee);
   } else if (trade.type === "sell") {
-    // Reverse a sell: return shares, deduct cash + fee
-    player.cash -= (trade.value + trade.fee);
+    // Reverse a sell: return shares, restore cash to pre-trade snapshot
+    player.cash = trade.cashBefore !== undefined ? trade.cashBefore : player.cash - (trade.value + trade.fee);
     const h = player.holdings.find(hh => hh.team === trade.team);
     if (h) {
       const tot = h.shares + trade.shares;
