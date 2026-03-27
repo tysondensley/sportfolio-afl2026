@@ -1295,6 +1295,10 @@ function drawHistoryChart(gs, focusPlayer){
 }
 
 function renderLeaderboard(){
+  const gs=gameState;
+  const deadline=gs.tradeDeadline?new Date(gs.tradeDeadline).getTime():null;
+  const isLocked=deadline&&Date.now()>deadline;
+  const useSnapshot=!isLocked&&gs.round>0&&gs.snapshot;
   const getVal=(name)=>(useSnapshot&&gs.snapshot&&gs.snapshot[name])?gs.snapshot[name].total:getTotal(gs.players[name]);
   const ranked=ALL_PLAYERS.map(n=>({name:n,val:getVal(n),isH:HUMAN_PLAYERS.includes(n)})).sort((a,b)=>b.val-a.val);
   const list=document.getElementById("lbList");
