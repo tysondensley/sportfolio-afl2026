@@ -224,6 +224,16 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
 .empty-icon{font-size:1.6rem;margin-bottom:.5rem}
 .mono{font-family:'DM Mono',monospace}
 
+
+/* Portfolio layout */
+.port-layout{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+.port-tradelog{}
+@media(max-width:640px){
+  .port-layout{grid-template-columns:1fr}
+  .player-tabs{flex-wrap:nowrap;overflow-x:auto;padding-bottom:.25rem;scrollbar-width:none}
+  .player-tabs::-webkit-scrollbar{display:none}
+  .player-tab{flex-shrink:0;padding:.3rem .65rem;font-size:.72rem}
+}
 @media(max-width:640px){
   nav button{font-size:.72rem;padding:.38rem .6rem}
   .two-col{grid-template-columns:1fr}
@@ -1011,13 +1021,15 @@ function renderPortfolio(){
   const deadline=gs.tradeDeadline?new Date(gs.tradeDeadline).getTime():null;
   const isLocked=deadline&&Date.now()>deadline;
   const useSnapshot=!isLocked&&gs.round>0&&gs.snapshot;
+
+  // Player tabs
   const tabs=document.getElementById("playerTabs");
   tabs.innerHTML="";
   ALL_PLAYERS.forEach(name=>{
     const isH=HUMAN_PLAYERS.includes(name);
     const btn=document.createElement("button");
     btn.className=`player-tab ${isH?"":"ai"} ${name===viewingPlayer?"active":""}`;
-    btn.innerHTML=`${isH?"👤":"🤖"} ${name}`;
+    btn.textContent=name;
     btn.onclick=()=>{viewingPlayer=name;renderPortfolio();};
     tabs.appendChild(btn);
   });
@@ -1030,107 +1042,142 @@ function renderPortfolio(){
   const vChg=vTotal-10000;
   const canAct=isViewingSelf&&gs.round<10&&!(deadline&&Date.now()>deadline);
   const isOpen=gs.round<10;
-  const hiddenBanner=(useSnapshot&&!isViewingSelf)?`<div class="banner closed" style="margin-bottom:.75rem"><div><span class="dot off"></span>Showing <strong>${viewingPlayer}'s</strong> portfolio as at end of last round.</div></div>`:"";
+  const hiddenBanner=(useSnapshot&&!isViewingSelf)
+    ?`<div class="banner closed" style="margin-bottom:.6rem"><div><span class="dot off"></span>Showing <strong>${viewingPlayer}'s</strong> portfolio as at end of last round.</div></div>`
+    :"";
   const rankStr=`#${getRank(viewingPlayer)} of ${ALL_PLAYERS.length}`;
 
+  // Holdings rows
   const teams=[...new Set(vP.holdings.map(h=>h.team))];
-  const holdingsHtml=teams.length===0
-    ?`<div style="padding:1rem;text-align:center;font-size:.8rem;color:var(--muted)">No holdings yet.</div>`
-    :teams.map(teamName=>{
-      const tranches=vP.holdings.filter(h=>h.team===teamName);
-      const price=getPrice(teamName);
-      const totalVal=tranches.reduce((s,h)=>s+h.shares*price,0);
-      const totalShrs=tranches.reduce((s,h)=>s+h.shares,0);
-      const totalCost=tranches.reduce((s,h)=>s+h.shares*h.buyPrice,0);
-      const pnl=totalVal-totalCost;
-      const pnlPct=totalCost>0?pnl/totalCost*100:0;
-      const pnlColor=pnl>=0?"var(--up)":"var(--down)";
-      const eligible=tranches.filter(h=>canSell(h)).reduce((s,h)=>s+h.shares,0);
-      const locked=totalShrs-eligible;
-      const canSellAny=eligible>0;
-      const ineligible=tranches.filter(h=>!canSell(h));
-      const holdPill=ineligible.length>0?`<span class="hold-tag" style="font-size:.55rem;padding:.1rem .3rem">HOLD ${Math.min(...ineligible.map(h=>roundsLeft(h)))}R</span>`:"";
-      const trancheDetail=tranches.length>1
-        ?tranches.map(h=>`${fmtS(h.shares)}@$${h.buyPrice.toFixed(2)}(R${h.buyRound===0?"Pre":h.buyRound})${canSell(h)?"":" HOLD "+roundsLeft(h)+"R"}`).join(" · ")
-        :`${fmtS(totalShrs)} shares · bought $${tranches[0].buyPrice.toFixed(2)} · now $${price.toFixed(2)}`;
-      return `<div class="holding">
-          <div>
-            <div style="font-weight:600;font-size:.88rem;display:flex;align-items:center">${teamLogo(teamName,"team-logo-md")}${teamName} ${holdPill}</div>
-            <div style="font-size:.68rem;color:var(--muted);font-family:'DM Mono',monospace;margin-top:.1rem">${trancheDetail}</div>
-            ${locked>0?`<div style="font-size:.65rem;color:var(--accent);margin-top:.1rem">${fmtS(locked)} locked · ${fmtS(eligible)} sellable</div>`:""}
-          </div>
-          <div>${!canSellAny&&tranches.length===1?`<span class="hold-tag">HOLD ${roundsLeft(tranches[0])}R</span>`:""}</div>
-          <div style="text-align:right;font-family:'DM Mono',monospace">
-            <div style="font-size:.9rem">${fmt(totalVal)}</div>
-            <div style="font-size:.7rem;color:${pnlColor}">${fmtD(pnl)} (${fmtP(pnlPct)})</div>
-          </div>
-          ${canAct?`<button class="sell-btn" onclick="openSellModal('${teamName}')" ${!canSellAny||!isOpen?"disabled":""}>${canSellAny?"SELL":"HOLD"}</button>`:"<div></div>"}
-        </div>`;
-    }).join("");
+  const holdingRows=teams.map(teamName=>{
+    const tranches=vP.holdings.filter(h=>h.team===teamName);
+    const price=getPrice(teamName);
+    const totalVal=tranches.reduce((s,h)=>s+h.shares*price,0);
+    const totalShrs=tranches.reduce((s,h)=>s+h.shares,0);
+    const totalCost=tranches.reduce((s,h)=>s+h.shares*h.buyPrice,0);
+    const pnl=totalVal-totalCost;
+    const pnlPct=totalCost>0?pnl/totalCost*100:0;
+    const pnlColor=pnl>=0?"var(--up)":"var(--down)";
+    const eligible=tranches.filter(h=>canSell(h)).reduce((s,h)=>s+h.shares,0);
+    const locked=totalShrs-eligible;
+    const canSellAny=eligible>0;
+    const ineligible=tranches.filter(h=>!canSell(h));
+    const minHold=ineligible.length>0?Math.min(...ineligible.map(h=>roundsLeft(h))):0;
+    const holdPill=ineligible.length>0?`<span class="hold-tag" style="font-size:.55rem;padding:.1rem .3rem;margin-left:3px">HOLD ${minHold}R</span>`:"";
+    const pctOfTotal=Math.round(totalVal/vTotal*100);
+    const avgBuy=totalCost>0?(totalCost/totalShrs).toFixed(2):tranches[0].buyPrice.toFixed(2);
+    const sellBtn=canAct
+      ?(canSellAny
+        ?`<td style="text-align:right;padding-right:6px"><button class="sell-btn" style="font-size:.62rem;padding:.18rem .45rem" onclick="openSellModal('${teamName}')">SELL</button></td>`
+        :`<td style="text-align:right;padding-right:6px"><span style="font-size:.62rem;color:var(--dim);font-family:'DM Mono',monospace">HOLD ${minHold}R</span></td>`)
+      :"<td></td>";
+    return `<tr>
+      <td style="padding:6px 4px 6px 8px">${teamLogoEl(teamName,20)}</td>
+      <td style="padding:6px 4px">
+        <div style="font-weight:600;font-size:.72rem;color:var(--text)">${teamName.replace("Gold Coast Suns","Gold Coast").replace("Western Bulldogs","W Bulldogs").replace("Brisbane Lions","Brisbane").replace("North Melbourne","North Melb").replace("Port Adelaide","Port Adel.")}${holdPill}</div>
+        <div style="font-size:.62rem;color:var(--muted);font-family:'DM Mono',monospace">${fmtS(totalShrs)} sh · $${avgBuy}</div>
+      </td>
+      <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:600;font-size:.72rem;color:var(--accent);padding:6px 4px">${fmt(totalVal)}</td>
+      <td style="text-align:right;font-family:'DM Mono',monospace;font-size:.66rem;color:var(--muted);padding:6px 4px">${pctOfTotal}%</td>
+      <td style="text-align:right;font-family:'DM Mono',monospace;font-size:.66rem;color:${pnlColor};padding:6px 4px">${fmtP(pnlPct)}</td>
+      ${sellBtn}
+    </tr>`;
+  }).join("");
 
+  const cashPct=Math.round(vP.cash/vTotal*100);
+  const cashRow=`<tr style="border-top:1px solid rgba(30,45,69,.5)">
+    <td style="padding:6px 4px 6px 8px"><div style="width:20px;height:20px;border-radius:4px;background:rgba(77,166,255,.15);display:flex;align-items:center;justify-content:center;font-size:.55rem;font-family:'DM Mono',monospace;color:var(--blue);font-weight:700">$</div></td>
+    <td style="font-size:.72rem;font-weight:600;color:var(--muted);padding:6px 4px">Cash Holdings</td>
+    <td style="text-align:right;font-family:'DM Mono',monospace;font-weight:600;font-size:.72rem;color:var(--blue);padding:6px 4px">${fmt(vP.cash)}</td>
+    <td style="text-align:right;font-family:'DM Mono',monospace;font-size:.66rem;color:var(--muted);padding:6px 4px">${cashPct}%</td>
+    <td style="text-align:right;font-size:.66rem;color:var(--dim);padding:6px 4px">—</td>
+    ${canAct?"<td></td>":""}
+  </tr>`;
+
+  const colHeader=canAct
+    ?`<th></th><th style="text-align:left">Team</th><th class="r">Value</th><th class="r">%</th><th class="r">P&L</th><th></th>`
+    :`<th></th><th style="text-align:left">Team</th><th class="r">Value</th><th class="r">%</th><th class="r">P&L</th>`;
+
+  const holdingsSection=`
+    <div style="border-bottom:1px solid var(--border)">
+      <div style="padding:6px 10px;display:flex;justify-content:space-between;align-items:center;background:var(--bg)">
+        <span style="font-size:.6rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);font-weight:600">Holdings</span>
+        ${canAct?`<button class="btn primary sm" onclick="showBuyFromPortfolio()">+ Buy</button>`:""}
+      </div>
+      <table style="width:100%;border-collapse:collapse;table-layout:fixed">
+        <colgroup>
+          <col style="width:28px"><col><col style="width:56px"><col style="width:34px"><col style="width:46px">${canAct?`<col style="width:52px">`:""}
+        </colgroup>
+        <thead><tr style="background:var(--bg)">
+          <th style="font-size:.58rem;text-transform:uppercase;letter-spacing:.07em;color:var(--dim);padding:3px 4px;border-bottom:1px solid var(--border)"></th>
+          <th style="font-size:.58rem;text-transform:uppercase;letter-spacing:.07em;color:var(--dim);padding:3px 4px;border-bottom:1px solid var(--border);text-align:left">Team</th>
+          <th style="font-size:.58rem;text-transform:uppercase;letter-spacing:.07em;color:var(--dim);padding:3px 4px;border-bottom:1px solid var(--border);text-align:right">Value</th>
+          <th style="font-size:.58rem;text-transform:uppercase;letter-spacing:.07em;color:var(--dim);padding:3px 4px;border-bottom:1px solid var(--border);text-align:right">%</th>
+          <th style="font-size:.58rem;text-transform:uppercase;letter-spacing:.07em;color:var(--dim);padding:3px 4px;border-bottom:1px solid var(--border);text-align:right">P&L</th>
+          ${canAct?`<th style="border-bottom:1px solid var(--border)"></th>`:""}
+        </tr></thead>
+        <tbody>${holdingRows}${cashRow}</tbody>
+      </table>
+      <div style="padding:4px 10px;font-size:.6rem;color:var(--dim);border-top:1px solid rgba(30,45,69,.3)">⭐ Top 4 earn interest · ⚠ Last team taxed</div>
+    </div>`;
+
+  // Trade log
   const tradeLogHtml=(()=>{
-    if(vP.tradeLog.length===0) return '<div style="padding:.75rem;font-size:.8rem;color:var(--muted);text-align:center">No trades yet.</div>';
+    if(vP.tradeLog.length===0) return `<div style="padding:.75rem;font-size:.8rem;color:var(--muted);text-align:center">No trades yet.</div>`;
     return [...vP.tradeLog].reverse().slice(0,20).map(t=>{
       const canUndo=t.id&&t.round===gameState.round&&vP.name===currentPlayer;
-      const undoHtml=canUndo?`<button class="btn sm danger" style="margin-top:.3rem;font-size:.62rem;padding:.2rem .5rem" onclick="undoTrade('${t.id}')">&#8617; Undo</button>`:"";
-      return `<div class="tlog-item"><div style="display:flex;align-items:center;gap:.4rem"><span class="tlog-type ${t.type==="buy"?"tlog-buy":"tlog-sell"}">${t.type.toUpperCase()}</span>${teamLogo(t.team,"team-logo-sm")}${t.team}</div><div style="text-align:right;font-family:'DM Mono',monospace"><div>${fmt(t.value)}</div><div style="font-size:.68rem;color:var(--muted)">${getRoundLabel(t.round)} &middot; Fee ${fmt(t.fee)}</div>${undoHtml}</div></div>`;
+      const undoHtml=canUndo?`<button class="btn sm danger" style="margin-top:.3rem;font-size:.62rem;padding:.18rem .45rem" onclick="undoTrade('${t.id}')">&#8617; Undo</button>`:"";
+      return `<div class="tlog-item"><div style="display:flex;align-items:center;gap:.35rem"><span class="tlog-type ${t.type==="buy"?"tlog-buy":"tlog-sell"}">${t.type.toUpperCase()}</span>${teamLogo(t.team,"team-logo-sm")}${t.team}</div><div style="text-align:right;font-family:'DM Mono',monospace"><div style="font-size:.78rem">${fmt(t.value)}</div><div style="font-size:.65rem;color:var(--muted)">${getRoundLabel(t.round)} · Fee ${fmt(t.fee)}</div>${undoHtml}</div></div>`;
     }).join("");
   })();
 
   const content=document.getElementById("portfolioContent");
   content.innerHTML=`
     ${hiddenBanner}
-    <div style="display:grid;grid-template-columns:repeat(4,1fr);background:var(--surface);border:1px solid var(--border);border-radius:10px;margin-bottom:1rem;overflow:hidden">
-      <div style="padding:.75rem .9rem;border-right:1px solid var(--border)">
-        <div style="font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:.2rem;white-space:nowrap">Total Portfolio</div>
-        <div style="font-family:'DM Mono',monospace;font-size:1rem;font-weight:600;color:${vChg>=0?"var(--up)":"var(--down)"}">${fmt(vTotal)}</div>
-        <div style="font-size:.62rem;color:${vChg>=0?"var(--up)":"var(--down)"}">${fmtP(vChg/10000*100)}</div>
+
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);background:var(--surface);border:1px solid var(--border);border-radius:10px;margin-bottom:.75rem;overflow:hidden">
+      <div style="padding:.6rem .8rem;border-right:1px solid var(--border)">
+        <div style="font-size:.55rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:.15rem;white-space:nowrap">Portfolio</div>
+        <div style="font-family:'DM Mono',monospace;font-size:.95rem;font-weight:600;color:${vChg>=0?"var(--up)":"var(--down)"}">${fmt(vTotal)}</div>
+        <div style="font-size:.6rem;color:${vChg>=0?"var(--up)":"var(--down)"}">${fmtP(vChg/10000*100)}</div>
       </div>
-      <div style="padding:.75rem .9rem;border-right:1px solid var(--border)">
-        <div style="font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:.2rem;white-space:nowrap">Cash Holdings</div>
-        <div style="font-family:'DM Mono',monospace;font-size:1rem;font-weight:600;color:var(--blue)">${fmt(vP.cash)}</div>
+      <div style="padding:.6rem .8rem;border-right:1px solid var(--border)">
+        <div style="font-size:.55rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:.15rem;white-space:nowrap">Cash</div>
+        <div style="font-family:'DM Mono',monospace;font-size:.95rem;font-weight:600;color:var(--blue)">${fmt(vP.cash)}</div>
       </div>
-      <div style="padding:.75rem .9rem;border-right:1px solid var(--border)">
-        <div style="font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:.2rem;white-space:nowrap">Next Brokerage</div>
-        <div style="font-family:'DM Mono',monospace;font-size:1rem;font-weight:600">${fmt(getBrokerageFee(vP))}</div>
+      <div style="padding:.6rem .8rem;border-right:1px solid var(--border)">
+        <div style="font-size:.55rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:.15rem;white-space:nowrap">Brokerage</div>
+        <div style="font-family:'DM Mono',monospace;font-size:.95rem;font-weight:600">${fmt(getBrokerageFee(vP))}</div>
       </div>
-      <div style="padding:.75rem .9rem">
-        <div style="font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:.2rem">Rank</div>
-        <div style="font-family:'DM Mono',monospace;font-size:1rem;font-weight:600;color:var(--accent)">${rankStr}</div>
+      <div style="padding:.6rem .8rem">
+        <div style="font-size:.55rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);margin-bottom:.15rem">Rank</div>
+        <div style="font-family:'DM Mono',monospace;font-size:.95rem;font-weight:600;color:var(--accent)">${rankStr}</div>
       </div>
     </div>
 
-    <div class="card" style="margin-bottom:1rem">
-      <div class="card-hd">
-        <div class="card-title">Holdings</div>
-        ${canAct?'<button class="btn primary sm" onclick="showBuyFromPortfolio()">+ Buy</button>':""}
-      </div>
-      <div class="card-body" style="padding:.75rem 1rem">
-        ${holdingsHtml}
-        <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.6rem .9rem;display:flex;justify-content:space-between;align-items:center;margin-top:.5rem">
-          <span style="font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em">Cash Holdings</span>
-          <span style="font-family:'DM Mono',monospace;color:var(--blue)">${fmt(vP.cash)}</span>
+    <div class="port-layout">
+      <div>
+        <div class="card" style="margin-bottom:.75rem;overflow:hidden">
+          ${holdingsSection}
+        </div>
+        <div class="card" style="margin-bottom:.75rem">
+          <div class="card-hd" style="padding:.6rem 1rem"><div class="card-title">Portfolio Breakdown</div></div>
+          <div style="display:flex;align-items:center;gap:1rem;padding:.75rem 1rem">
+            <div id="pieChartWrap" style="flex-shrink:0;width:100px;height:100px"></div>
+            <div id="pieLegend" style="font-size:.72rem;line-height:1.8;flex:1"></div>
+          </div>
         </div>
       </div>
-    </div>
-
-     <div class="card" style="margin-bottom:1rem">
-      <div class="card-hd"><div class="card-title">Portfolio Breakdown</div></div>
-      <div class="card-body" style="display:flex;align-items:center;gap:1.5rem;flex-wrap:wrap;padding:.75rem 1rem">
-        <div id="pieChartWrap" style="flex-shrink:0;width:140px;height:140px"></div>
-        <div id="pieLegend" style="font-size:.75rem;line-height:1.9;flex:1;min-width:120px"></div>
+      <div class="card port-tradelog">
+        <div class="card-hd" style="padding:.6rem 1rem"><div class="card-title">Trade Log</div></div>
+        <div style="padding:.5rem .75rem">${tradeLogHtml}</div>
       </div>
-    </div>
-
-    <div class="card">
-      <div class="card-hd"><div class="card-title">Trade Log</div></div>
-      <div class="card-body" style="padding:.75rem 1rem">${tradeLogHtml}</div>
     </div>`;
 
-  setTimeout(()=>{
-    drawPieChart(vP,vTotal);
-  },50);
+  setTimeout(()=>drawPieChart(vP,vTotal),50);
 }
+
+
 
 function showBuyFromPortfolio(){
   // Open a team picker — show market tab with buy modals accessible
