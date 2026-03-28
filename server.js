@@ -877,6 +877,18 @@ app.post("/api/admin/advance", async (req, res) => {
   gs.previousState = JSON.parse(JSON.stringify(gs));
   delete gs.previousState.previousState; // Don't nest snapshots
 
+  // Snapshot each player's portfolio total at end of this round for Weekly Winner tracking
+  ALL_PLAYERS.forEach(name => {
+    const p = gs.players[name];
+    if (!p.roundHistory) p.roundHistory = {};
+    const holdingsValue = (p.holdings || []).reduce((sum, h) => {
+      const pos = gs.ladder.findIndex(t => t.name === h.team);
+      const price = PRICE_SCALE[pos + 1] || PRICE_SCALE[18];
+      return sum + price * h.shares;
+    }, 0);
+    p.roundHistory[gs.round] = Math.round((p.cash + holdingsValue) * 100) / 100;
+  });
+
   applyInterestAndTax(gs.players, gs.ladder);
   gs.prevLadder = JSON.parse(JSON.stringify(gs.ladder));
   gs.round += 1;
@@ -992,8 +1004,6 @@ app.get("/api/live-status", async (req, res) => {
   });
 });
 
-
-
 // Admin: download backup
 app.get("/api/admin/backup", async (req, res) => {
   if (req.query.playerName !== "Tyson") return res.status(403).json({ error: "Admin only" });
@@ -1072,4 +1082,3 @@ initDb().then(async () => {
   console.error("Failed to initialise database:", err);
   process.exit(1);
 });
-
