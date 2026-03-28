@@ -105,7 +105,7 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
 .ladder-mob th{font-size:.58rem;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);padding:.35rem .5rem;text-align:left;border-bottom:1px solid var(--border)}
 .ladder-mob th.r{text-align:right}
 .ladder-mob th.c{text-align:center}
-.ladder-mob td{padding:.35rem .4rem;font-size:.75rem;border-bottom:1px solid rgba(30,45,69,.3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ladder-mob td{padding:.35rem .25rem;font-size:.75rem;border-bottom:1px solid rgba(30,45,69,.3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ladder-mob tr.top4 td{background:rgba(255,180,0,.025)}
 .ladder-mob tr.held td{background:rgba(77,166,255,.04)}
 .ladder-mob tr.bot td{background:rgba(255,79,109,.025)}
@@ -358,13 +358,14 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
         <!-- MOBILE TABLE -->
         <table class="ladder-mob">
           <colgroup>
+            <col style="width:18px">
             <col style="width:20px">
-            <col style="width:22px">
-            <col style="width:82px">
-            <col style="width:50px">
-            <col style="width:26px">
+            <col style="width:62px">
             <col style="width:46px">
-            <col style="width:70px">
+            <col style="width:24px">
+            <col style="width:44px">
+            <col style="width:62px">
+            <col style="width:26px">
           </colgroup>
           <thead><tr>
             <th></th><th></th><th>Team</th>
@@ -372,6 +373,7 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
             <th class="r">Pts</th>
             <th class="r">%</th>
             <th class="c">Next 3</th>
+            <th></th>
           </tr></thead>
           <tbody id="ladderBodyMob"></tbody>
         </table>
@@ -560,6 +562,27 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
     </div>
 
   </main>
+</div>
+
+<!-- TRADE OVERLAY -->
+<div class="overlay" id="tradeOverlay">
+  <div class="modal" style="max-width:360px;margin-top:auto">
+    <div class="modal-hd" style="padding:.9rem 1.1rem">
+      <div style="display:flex;align-items:center;gap:.75rem">
+        <div id="tradeOverlayLogo" style="width:36px;height:36px;border-radius:8px;overflow:hidden;flex-shrink:0"></div>
+        <div>
+          <div class="modal-title" id="tradeOverlayName"></div>
+          <div style="font-size:.7rem;color:var(--accent);font-family:'DM Mono',monospace" id="tradeOverlayPrice"></div>
+          <div style="font-size:.68rem;color:var(--muted);font-family:'DM Mono',monospace" id="tradeOverlayHolding"></div>
+        </div>
+      </div>
+      <button class="modal-x" onclick="closeTradeOverlay()">✕</button>
+    </div>
+    <div style="padding:.75rem .875rem;display:flex;flex-direction:column;gap:.5rem" id="tradeOverlayActions"></div>
+    <div style="padding:.6rem;text-align:center;border-top:1px solid var(--border)">
+      <button class="btn" style="width:100%;color:var(--muted)" onclick="closeTradeOverlay()">Cancel</button>
+    </div>
+  </div>
 </div>
 
 <!-- SELL MODAL -->
@@ -790,7 +813,58 @@ function logout(){
   clearInterval(syncInterval);
   document.getElementById("gameScreen").style.display="none";
   document.getElementById("loginScreen").style.display="flex";
-  initLogin();
+  
+function openTradeOverlay(teamName, hasHolding){
+  const gs=gameState;
+  const myP=gs.players[currentPlayer];
+  const price=getPrice(teamName);
+  const tranches=myP.holdings.filter(h=>h.team===teamName);
+  const totalShrs=tranches.reduce((s,h)=>s+h.shares,0);
+  const totalVal=totalShrs*price;
+  const eligible=Math.floor(tranches.filter(h=>canSell(h)).reduce((s,h)=>s+h.shares,0));
+  const minHold=minRoundsLeft(teamName);
+
+  // Header
+  const logoEl=document.getElementById("tradeOverlayLogo");
+  logoEl.innerHTML=teamLogoEl(teamName,36);
+  document.getElementById("tradeOverlayName").textContent=teamName;
+  document.getElementById("tradeOverlayPrice").textContent=`$${price.toFixed(2)} · #${gs.ladder.findIndex(t=>t.name===teamName)+1} on ladder`;
+  document.getElementById("tradeOverlayHolding").textContent=hasHolding
+    ?`You hold ${fmtS(totalShrs)} shares · ${fmt(totalVal)}`
+    :"You have no holding";
+
+  // Action buttons
+  const acts=document.getElementById("tradeOverlayActions");
+  const fee=getBrokerageFee(myP);
+  const maxInvest=getTotal(myP)*PORTFOLIO_CAP;
+  const existingVal=totalShrs*price;
+  const maxBuy=Math.min(Math.floor(myP.cash-fee), Math.floor(maxInvest-existingVal));
+
+  let btns="";
+  // Buy button
+  btns+=`<button onclick="closeTradeOverlay();openBuyModal('${teamName}')" style="background:rgba(255,180,0,.08);border:1px solid rgba(255,180,0,.25);color:var(--accent);border-radius:8px;padding:.75rem 1rem;display:flex;justify-content:space-between;align-items:center;width:100%;font-family:inherit;cursor:pointer;${maxBuy<=0?'opacity:.4;cursor:not-allowed':''}">
+    <span style="font-size:.88rem;font-weight:700">Buy shares</span>
+    <span style="font-size:.72rem;color:var(--muted);font-family:'DM Mono',monospace">${maxBuy>0?`Up to ${fmt(maxBuy)}`:'Cap reached'}</span>
+  </button>`;
+
+  // Sell button — only if holding
+  if(hasHolding){
+    const sellLabel=eligible>0?`${fmtS(eligible)} sellable`:minHold>0?`HOLD ${minHold}R`:"None sellable";
+    btns+=`<button onclick="${eligible>0?`closeTradeOverlay();openSellModal('${teamName}')`:'void(0)'}" style="background:rgba(255,79,109,.07);border:1px solid rgba(255,79,109,.25);color:var(--down);border-radius:8px;padding:.75rem 1rem;display:flex;justify-content:space-between;align-items:center;width:100%;font-family:inherit;cursor:${eligible>0?'pointer':'not-allowed'};${eligible<=0?'opacity:.5':''}">
+      <span style="font-size:.88rem;font-weight:700">Sell shares</span>
+      <span style="font-size:.72rem;color:var(--muted);font-family:'DM Mono',monospace">${sellLabel}</span>
+    </button>`;
+  }
+
+  acts.innerHTML=btns;
+  document.getElementById("tradeOverlay").classList.add("open");
+}
+
+function closeTradeOverlay(){
+  document.getElementById("tradeOverlay").classList.remove("open");
+}
+
+initLogin();
 }
 
 function renderAll(){
@@ -917,14 +991,21 @@ function buildLadderRow(team, idx, gs, myP, displayP, isOpen, isLocked, isMobile
 
   if(isMobile){
     const posCls=pos<=4?"pos-top4":pos===18?"pos-bot":"pos-mid";
+    const hasHolding=myHTotalShares>0;
+    const tradeBtnColor=hasHolding?"rgba(77,166,255,.15)":"rgba(255,180,0,.1)";
+    const tradeBtnBorder=hasHolding?"rgba(77,166,255,.3)":"rgba(255,180,0,.25)";
+    const tradeBtn=!isLocked&&isOpen
+      ?`<td style="text-align:center;padding:0 2px"><button onclick="openTradeOverlay('${team.name.replace(/'/g,"\'")}',${hasHolding?1:0})" style="width:24px;height:24px;border-radius:5px;background:${tradeBtnColor};border:1px solid ${tradeBtnBorder};display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;padding:0;color:var(--text)">⇄</button></td>`
+      :`<td></td>`;
     return `<tr class="${rowClass}">
       <td><span class="pos-sm ${posCls}" style="font-family:'DM Mono',monospace;font-size:.58rem">${pos}</span></td>
       <td>${teamLogoEl(team.name,18)}</td>
       <td style="font-size:.68rem;font-weight:600;color:var(--text);padding-left:3px">${team.name.replace("Gold Coast Suns","Gold Coast").replace("Western Bulldogs","W Bulldogs").replace("Sydney Swans","Sydney").replace("Brisbane Lions","Brisbane").replace("North Melbourne","North Melb").replace("Port Adelaide","Port Adel.")}</td>
       <td style="text-align:right;font-size:.66rem;font-family:'DM Mono',monospace;color:var(--accent)">$${price.toFixed(2)}<br><span style="font-size:.58rem;color:${chgColor}">${chgSymbol}</span></td>
       <td style="text-align:right;font-size:.64rem;font-family:'DM Mono',monospace;color:var(--muted)">${gs.round>0?team.pts:"—"}</td>
-      <td style="text-align:right;font-size:.64rem;font-family:'DM Mono',monospace;color:var(--muted)">${gs.round>0?team.pct.toFixed(1):"—"}</td>
-      <td style="text-align:center;padding:0 2px">${fixtureHtml}</td>
+      <td style="text-align:right;font-size:.62rem;font-family:'DM Mono',monospace;color:var(--muted)">${gs.round>0?team.pct.toFixed(1):"—"}</td>
+      <td style="text-align:center;padding:0 1px">${fixtureHtml}</td>
+      ${tradeBtn}
     </tr>`;
   } else {
     const posBadge=pos<=4?`pos-badge pos-top4`:pos<=8?`pos-badge pos-top8`:pos===18?`pos-badge pos-bot`:`pos-badge pos-mid`;
@@ -1686,6 +1767,57 @@ function showToast(type,title,msg){
   el.className="show "+type;
   clearTimeout(toastTimer);
   toastTimer=setTimeout(()=>el.className="",3500);
+}
+
+
+function openTradeOverlay(teamName, hasHolding){
+  const gs=gameState;
+  const myP=gs.players[currentPlayer];
+  const price=getPrice(teamName);
+  const tranches=myP.holdings.filter(h=>h.team===teamName);
+  const totalShrs=tranches.reduce((s,h)=>s+h.shares,0);
+  const totalVal=totalShrs*price;
+  const eligible=Math.floor(tranches.filter(h=>canSell(h)).reduce((s,h)=>s+h.shares,0));
+  const minHold=minRoundsLeft(teamName);
+
+  // Header
+  const logoEl=document.getElementById("tradeOverlayLogo");
+  logoEl.innerHTML=teamLogoEl(teamName,36);
+  document.getElementById("tradeOverlayName").textContent=teamName;
+  document.getElementById("tradeOverlayPrice").textContent=`$${price.toFixed(2)} · #${gs.ladder.findIndex(t=>t.name===teamName)+1} on ladder`;
+  document.getElementById("tradeOverlayHolding").textContent=hasHolding
+    ?`You hold ${fmtS(totalShrs)} shares · ${fmt(totalVal)}`
+    :"You have no holding";
+
+  // Action buttons
+  const acts=document.getElementById("tradeOverlayActions");
+  const fee=getBrokerageFee(myP);
+  const maxInvest=getTotal(myP)*PORTFOLIO_CAP;
+  const existingVal=totalShrs*price;
+  const maxBuy=Math.min(Math.floor(myP.cash-fee), Math.floor(maxInvest-existingVal));
+
+  let btns="";
+  // Buy button
+  btns+=`<button onclick="closeTradeOverlay();openBuyModal('${teamName}')" style="background:rgba(255,180,0,.08);border:1px solid rgba(255,180,0,.25);color:var(--accent);border-radius:8px;padding:.75rem 1rem;display:flex;justify-content:space-between;align-items:center;width:100%;font-family:inherit;cursor:pointer;${maxBuy<=0?'opacity:.4;cursor:not-allowed':''}">
+    <span style="font-size:.88rem;font-weight:700">Buy shares</span>
+    <span style="font-size:.72rem;color:var(--muted);font-family:'DM Mono',monospace">${maxBuy>0?`Up to ${fmt(maxBuy)}`:'Cap reached'}</span>
+  </button>`;
+
+  // Sell button — only if holding
+  if(hasHolding){
+    const sellLabel=eligible>0?`${fmtS(eligible)} sellable`:minHold>0?`HOLD ${minHold}R`:"None sellable";
+    btns+=`<button onclick="${eligible>0?`closeTradeOverlay();openSellModal('${teamName}')`:'void(0)'}" style="background:rgba(255,79,109,.07);border:1px solid rgba(255,79,109,.25);color:var(--down);border-radius:8px;padding:.75rem 1rem;display:flex;justify-content:space-between;align-items:center;width:100%;font-family:inherit;cursor:${eligible>0?'pointer':'not-allowed'};${eligible<=0?'opacity:.5':''}">
+      <span style="font-size:.88rem;font-weight:700">Sell shares</span>
+      <span style="font-size:.72rem;color:var(--muted);font-family:'DM Mono',monospace">${sellLabel}</span>
+    </button>`;
+  }
+
+  acts.innerHTML=btns;
+  document.getElementById("tradeOverlay").classList.add("open");
+}
+
+function closeTradeOverlay(){
+  document.getElementById("tradeOverlay").classList.remove("open");
 }
 
 initLogin();
