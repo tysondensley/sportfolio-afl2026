@@ -373,7 +373,7 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
             <th class="r">Pts</th>
             <th class="r">%</th>
             <th class="c">Next 3</th>
-            <th></th>
+            <th class="c" style="font-size:.58rem">Trade</th>
           </tr></thead>
           <tbody id="ladderBodyMob"></tbody>
         </table>
@@ -390,11 +390,12 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
         </div>
         <table class="mob-h-tbl">
           <thead><tr>
-            <th style="width:26px"></th>
+            <th style="width:24px"></th>
             <th>Team</th>
             <th class="r" style="width:54px">Value</th>
             <th class="r" style="width:32px">%</th>
             <th class="r" style="width:42px">P&amp;L</th>
+            <th class="c" style="width:28px;font-size:.58rem">Trade</th>
           </tr></thead>
           <tbody id="mobHoldingsBody"></tbody>
         </table>
@@ -994,9 +995,8 @@ function buildLadderRow(team, idx, gs, myP, displayP, isOpen, isLocked, isMobile
     const hasHolding=myHTotalShares>0;
     const tradeBtnColor=hasHolding?"rgba(77,166,255,.15)":"rgba(255,180,0,.1)";
     const tradeBtnBorder=hasHolding?"rgba(77,166,255,.3)":"rgba(255,180,0,.25)";
-    const tradeBtn=!isLocked&&isOpen
-      ?`<td style="text-align:center;padding:0 2px"><button onclick="openTradeOverlay('${team.name.replace(/'/g,"\'")}',${hasHolding?1:0})" style="width:24px;height:24px;border-radius:5px;background:${tradeBtnColor};border:1px solid ${tradeBtnBorder};display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:12px;padding:0;color:var(--text)">⇄</button></td>`
-      :`<td></td>`;
+    const tradeBtnActive=!isLocked&&isOpen;
+    const tradeBtn=`<td style="text-align:center;padding:0 2px"><button ${tradeBtnActive?`onclick="openTradeOverlay('${team.name.replace(/'/g,"\'")}',${hasHolding?1:0})"`:'disabled'} style="width:24px;height:24px;border-radius:5px;background:${tradeBtnActive?tradeBtnColor:'rgba(30,45,69,.3)'};border:1px solid ${tradeBtnActive?tradeBtnBorder:'rgba(30,45,69,.5)'};display:inline-flex;align-items:center;justify-content:center;font-size:12px;padding:0;color:${tradeBtnActive?'var(--text)':'#3a4560'};cursor:${tradeBtnActive?'pointer':'default'};opacity:${tradeBtnActive?'1':'.45'}">⇄</button></td>`;
     return `<tr class="${rowClass}">
       <td><span class="pos-sm ${posCls}" style="font-family:'DM Mono',monospace;font-size:.58rem">${pos}</span></td>
       <td>${teamLogoEl(team.name,18)}</td>
@@ -1075,12 +1075,19 @@ function renderMobHoldings(myP,gs){
     const pnlColor=pnl>=0?"var(--up)":"var(--down)";
     const ineligible=tranches.filter(h=>!canSell(h));
     const holdPill=ineligible.length>0?`<span style="font-size:.55rem;background:rgba(255,180,0,.12);color:var(--accent);border:1px solid rgba(255,180,0,.2);border-radius:3px;padding:1px 3px;font-family:'DM Mono',monospace;margin-left:2px">HOLD ${Math.min(...ineligible.map(h=>roundsLeft(h)))}R</span>`:"";
+    const isLocked2=gameState.tradeDeadline&&Date.now()>new Date(gameState.tradeDeadline).getTime();
+    const canActMob=!isLocked2&&gameState.round<10&&myP.name===currentPlayer;
+    const hasHoldingMob=true;
+    const mobTradeBtnActive=canActMob;
+    const mobTradeBtnColor=hasHoldingMob?"rgba(77,166,255,.15)":"rgba(255,180,0,.1)";
+    const mobTradeBtnBorder=hasHoldingMob?"rgba(77,166,255,.3)":"rgba(255,180,0,.25)";
     return `<tr>
       <td>${teamLogoEl(teamName,20)}</td>
       <td style="font-size:.7rem;font-weight:600;color:var(--text)">${teamName.replace("Gold Coast Suns","Gold Coast").replace("Western Bulldogs","W Bulldogs").replace("Brisbane Lions","Brisbane").replace("North Melbourne","North Melb").replace("Port Adelaide","Port Adel.")}${holdPill}</td>
       <td style="text-align:right;font-size:.72rem;font-family:'DM Mono',monospace;font-weight:600;color:var(--accent)">${fmt(val)}</td>
       <td style="text-align:right;font-size:.68rem;font-family:'DM Mono',monospace;color:var(--muted)">${Math.round(val/myTotal*100)}%</td>
       <td style="text-align:right;font-size:.68rem;font-family:'DM Mono',monospace;color:${pnlColor}">${fmtP(pnlPct)}</td>
+      <td style="text-align:center;padding:0 2px"><button ${mobTradeBtnActive?`onclick="openTradeOverlay('${teamName.replace(/'/g,"\'")}',1)"`:'disabled'} style="width:24px;height:24px;border-radius:5px;background:${mobTradeBtnActive?mobTradeBtnColor:'rgba(30,45,69,.3)'};border:1px solid ${mobTradeBtnActive?mobTradeBtnBorder:'rgba(30,45,69,.5)'};display:inline-flex;align-items:center;justify-content:center;font-size:12px;padding:0;color:${mobTradeBtnActive?'var(--text)':'#3a4560'};cursor:${mobTradeBtnActive?'pointer':'default'};opacity:${mobTradeBtnActive?'1':'.45'}">⇄</button></td>
     </tr>`;
   });
 
@@ -1092,6 +1099,7 @@ function renderMobHoldings(myP,gs){
     <td style="text-align:right;font-size:.72rem;font-family:'DM Mono',monospace;font-weight:600;color:var(--blue)">${fmt(myP.cash)}</td>
     <td style="text-align:right;font-size:.68rem;font-family:'DM Mono',monospace;color:var(--muted)">${cashPct}%</td>
     <td style="text-align:right;font-size:.68rem;color:var(--dim)">—</td>
+    <td></td>
   </tr>`;
 
   body.innerHTML=teamRows.join("")+cashRow;
