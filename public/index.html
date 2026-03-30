@@ -1312,10 +1312,14 @@ function drawPieChart(vP,vTotal){
   if(!wrap) return;
   wrap.innerHTML="";
   const canvas=document.createElement("canvas");
-  canvas.width=160;canvas.height=160;
+  const dpr=window.devicePixelRatio||1;
+  const size=wrap.clientWidth||100;
+  canvas.width=size*dpr; canvas.height=size*dpr;
+  canvas.style.width=size+"px"; canvas.style.height=size+"px";
   wrap.appendChild(canvas);
   const ctx=canvas.getContext("2d");
-  const W=160,H=160;
+  ctx.scale(dpr,dpr);
+  const W=size,H=size;
   const cx=W/2,cy=H/2,r=Math.min(W,H)/2-4;
   const TEAM_COLORS=["#FFB400","#4da6ff","#00c97a","#ff4f6d","#a78bfa","#f97316","#06b6d4","#ec4899","#84cc16","#f59e0b","#10b981","#3b82f6","#ef4444","#8b5cf6","#14b8a6","#f43f5e","#22c55e","#6366f1"];
   const teamNames=[...new Set(vP.holdings.map(h=>h.team))];
@@ -1325,7 +1329,7 @@ function drawPieChart(vP,vTotal){
   });
   if(vP.cash>0) slices.push({label:"Cash",val:vP.cash,color:"#4da6ff"});
   if(!slices.length) return;
-  ctx.clearRect(0,0,160,160);
+  ctx.clearRect(0,0,W,H);
   let startAngle=-Math.PI/2;
   slices.forEach(s=>{
     const sweep=(s.val/vTotal)*2*Math.PI;
