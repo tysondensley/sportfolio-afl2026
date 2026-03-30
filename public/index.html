@@ -1282,6 +1282,10 @@ function renderPortfolio(){
             <div id="pieLegend" style="font-size:.72rem;line-height:1.8;flex:1"></div>
           </div>
         </div>
+        <div class="card" style="margin-bottom:.75rem">
+          <div class="card-hd" style="padding:.6rem 1rem"><div class="card-title">Round History</div></div>
+          <div id="roundHistoryWrap" style="padding:.5rem .75rem"></div>
+        </div>
       </div>
       <div class="card port-tradelog">
         <div class="card-hd" style="padding:.6rem 1rem"><div class="card-title">Trade Log</div></div>
@@ -1289,7 +1293,10 @@ function renderPortfolio(){
       </div>
     </div>`;
 
-  setTimeout(()=>drawPieChart(vP,vTotal),50);
+  setTimeout(()=>{
+    drawPieChart(vP,vTotal);
+    drawRoundHistory(gs,viewingPlayer);
+  },50);
 }
 
 
@@ -1308,6 +1315,7 @@ function drawPieChart(vP,vTotal){
   canvas.width=160;canvas.height=160;
   wrap.appendChild(canvas);
   const ctx=canvas.getContext("2d");
+  const W=160,H=160;
   const cx=W/2,cy=H/2,r=Math.min(W,H)/2-4;
   const TEAM_COLORS=["#FFB400","#4da6ff","#00c97a","#ff4f6d","#a78bfa","#f97316","#06b6d4","#ec4899","#84cc16","#f59e0b","#10b981","#3b82f6","#ef4444","#8b5cf6","#14b8a6","#f43f5e","#22c55e","#6366f1"];
   const teamNames=[...new Set(vP.holdings.map(h=>h.team))];
@@ -1333,6 +1341,46 @@ function drawPieChart(vP,vTotal){
       <span style="margin-left:auto;font-family:'DM Mono',monospace;color:var(--text)">${Math.round(s.val/vTotal*100)}%</span>
     </div>`).join("");
   }
+}
+
+
+function drawRoundHistory(gs, playerName){
+  const wrap=document.getElementById("roundHistoryWrap");
+  if(!wrap) return;
+  const history=gs.history||[];
+  if(!history.length){
+    wrap.innerHTML=`<div style="font-size:.78rem;color:var(--muted);text-align:center;padding:.5rem">History will appear after rounds advance.</div>`;
+    return;
+  }
+  // Build rows: Pre ($10k) + each history entry
+  const rows=[{round:0,val:10000},...history.map(h=>({round:h.round,val:h.totals[playerName]||10000}))];
+  // Also add current live value if locked (in-round)
+  const deadline=gs.tradeDeadline?new Date(gs.tradeDeadline).getTime():null;
+  const isLocked=deadline&&Date.now()>deadline;
+  if(isLocked){
+    rows.push({round:gs.round,val:getTotal(gs.players[playerName]),live:true});
+  }
+  const maxVal=Math.max(...rows.map(r=>r.val));
+  wrap.innerHTML=rows.map((r,i)=>{
+    const label=r.round===0?"Pre-Season":r.live?`R${r.round} (live)`:`After R${r.round}`;
+    const chg=i===0?0:r.val-rows[i-1].val;
+    const chgPct=i===0?0:(chg/rows[i-1].val*100);
+    const chgColor=chg>0?"var(--up)":chg<0?"var(--down)":"var(--muted)";
+    const barW=Math.round(r.val/maxVal*100);
+    const isLatest=i===rows.length-1;
+    return `<div style="margin-bottom:.5rem">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px">
+        <span style="font-size:.68rem;color:${isLatest?"var(--text)":"var(--muted)"};font-weight:${isLatest?600:400}">${label}</span>
+        <div style="display:flex;align-items:baseline;gap:.5rem">
+          ${i>0?`<span style="font-size:.62rem;color:${chgColor};font-family:'DM Mono',monospace">${chg>=0?"+":""}${fmtP(chgPct)}</span>`:""}
+          <span style="font-family:'DM Mono',monospace;font-size:.75rem;font-weight:600;color:${isLatest?"var(--accent)":"var(--text)"}">${fmt(r.val)}</span>
+        </div>
+      </div>
+      <div style="height:4px;background:var(--surface2);border-radius:2px;overflow:hidden">
+        <div style="height:4px;width:${barW}%;background:${isLatest?"var(--accent)":"var(--muted)"};border-radius:2px;opacity:${isLatest?1:0.5}"></div>
+      </div>
+    </div>`;
+  }).join("");
 }
 
 function drawHistoryChart(gs, focusPlayer){
