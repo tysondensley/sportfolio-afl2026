@@ -422,14 +422,14 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
         <button id="lbTab1" class="lb-tab-pill" onclick="switchLbTab(1)">This Round</button>
       </div>
       <!-- Overall rankings -->
-      <div id="lbPanelOverall">
+      <div id="lbPanelOverall" style="max-width:640px">
         <div style="display:flex;justify-content:space-between;align-items:center;padding:.4rem 1rem;border-bottom:1px solid rgba(30,45,69,.2)">
           <span style="font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)" id="lbRoundLabel">Pre-Season</span>
         </div>
         <div id="lbList"></div>
       </div>
       <!-- This Round rankings -->
-      <div id="lbPanelRound" style="display:none">
+      <div id="lbPanelRound" style="display:none;max-width:640px">
         <div style="padding:.4rem 1rem;border-bottom:1px solid rgba(30,45,69,.2)">
           <span style="font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)" id="lbRoundLabelR">Round — biggest % gain from round start</span>
         </div>
@@ -1463,7 +1463,20 @@ function renderLeaderboard(){
   const deadline=gs.tradeDeadline?new Date(gs.tradeDeadline).getTime():null;
   const isLocked=deadline&&Date.now()>deadline;
   const useSnapshot=!isLocked&&gs.round>0&&gs.snapshot;
-  const getVal=(name)=>(useSnapshot&&gs.snapshot&&gs.snapshot[name])?gs.snapshot[name].total:getTotal(gs.players[name]);
+
+  // Overall value — freeze at round-start snapshot for ALL players during trading window
+  // This hides brokerage fees and trade activity until lockout
+  const getVal=(name)=>(gs.snapshot&&gs.snapshot[name]&&gs.round>0)?gs.snapshot[name].total:getTotal(gs.players[name]);
+
+  // Holdings to display — always use snapshot so in-progress trades are hidden
+  // During trading window: show snapshot holdings (start of this round)
+  // Pre-round: fall back to live holdings
+  const getDisplayHoldings=(name)=>{
+    if(gs.snapshot&&gs.snapshot[name]&&gs.snapshot[name].holdings){
+      return gs.snapshot[name].holdings;
+    }
+    return gs.players[name].holdings;
+  };
 
   // ── OVERALL TAB ──
   const ranked=ALL_PLAYERS.map(n=>({name:n,val:getVal(n),isH:HUMAN_PLAYERS.includes(n)})).sort((a,b)=>b.val-a.val);
@@ -1477,9 +1490,8 @@ function renderLeaderboard(){
     const chg=p.val-10000;
     const rankColor=rank===1?"var(--accent)":rank===2?"#b0bec5":rank===3?"#cd8c4a":"var(--dim)";
     const isMe=p.name===currentPlayer;
-    // Holdings logos
-    const holdings=gs.players[p.name].holdings;
-    const heldTeams=[...new Set(holdings.map(h=>h.team))];
+    const displayHoldings=getDisplayHoldings(p.name);
+    const heldTeams=[...new Set(displayHoldings.map(h=>h.team))];
     const logosHtml=heldTeams.map(t=>teamLogoEl(t,16)).join("");
     const div=document.createElement("div");
     div.className=`lb-row ${isMe?"me":""}`;
@@ -1503,26 +1515,56 @@ function renderLeaderboard(){
 
   // ── THIS ROUND TAB ──
   const lbRoundEl=document.getElementById("lbRoundLabelR");
-  if(lbRoundEl) lbRoundEl.textContent=`${roundLabel} · biggest % gain from round start`;
-
   const listR=document.getElementById("lbListRound");
   if(listR){
     listR.innerHTML="";
-    // Calculate round gain — current vs snapshot at round start
-    const roundRanked=ALL_PLAYERS.map(n=>{
-      const cur=getTotal(gs.players[n]);
-      const base=gs.snapshot&&gs.snapshot[n]?gs.snapshot[n].total:10000;
-      const pct=base>0?(cur-base)/base*100:0;
-      return {name:n,pct,isH:HUMAN_PLAYERS.includes(n)};
-    }).sort((a,b)=>b.pct-a.pct);
 
-    const maxPct=Math.max(...roundRanked.map(p=>Math.abs(p.pct)),0.1);
-    const MEDALS=["🥇","🥈","🥉"];
-    const BAR_COLORS=["#FFB400","#b0bec5","#cd8c4a","#4da6ff","#00c97a","#a78bfa","#637089","#637089","#637089","#637089"];
+    // Determine what "this round" means:
+    // - During lockout: compare live values vs gs.snapshot (round start) = real-time in-round gains
+    // - During trading window: compare gs.snapshot (end of last round) vs previousState.snapshot (end of round before that)
+    let roundRanked;
+    let roundTabLabel;
 
-    if(!gs.snapshot){
-      listR.innerHTML=`<div style="padding:1.5rem;text-align:center;font-size:.82rem;color:var(--muted)">Advance to Round 1 to see round gains.</div>`;
+    if(isLocked && gs.snapshot){
+      // Active round — live gains vs round start
+      roundTabLabel=`${roundLabel} · live gains during round`;
+      roundRanked=ALL_PLAYERS.map(n=>{
+        const cur=getTotal(gs.players[n]);
+        const base=gs.snapshot[n]?gs.snapshot[n].total:10000;
+        const pct=base>0?(cur-base)/base*100:0;
+        return {name:n,pct,isH:HUMAN_PLAYERS.includes(n)};
+      }).sort((a,b)=>b.pct-a.pct);
+    } else if(gs.snapshot && gs.previousState && gs.previousState.snapshot){
+      // Trading window — show completed previous round's gains
+      const prevRoundLabel=getRoundFullLabel(gs.previousState.round);
+      roundTabLabel=`${prevRoundLabel} · % gain for the round`;
+      roundRanked=ALL_PLAYERS.map(n=>{
+        const endVal=gs.snapshot[n]?gs.snapshot[n].total:10000;
+        const startVal=gs.previousState.snapshot[n]?gs.previousState.snapshot[n].total:10000;
+        const pct=startVal>0?(endVal-startVal)/startVal*100:0;
+        return {name:n,pct,isH:HUMAN_PLAYERS.includes(n)};
+      }).sort((a,b)=>b.pct-a.pct);
+    } else if(gs.snapshot){
+      // Round 1 trading window — no previous snapshot, show from $10k baseline
+      roundTabLabel=`${roundLabel} · gains since start`;
+      roundRanked=ALL_PLAYERS.map(n=>{
+        const endVal=gs.snapshot[n]?gs.snapshot[n].total:10000;
+        const pct=(endVal-10000)/10000*100;
+        return {name:n,pct,isH:HUMAN_PLAYERS.includes(n)};
+      }).sort((a,b)=>b.pct-a.pct);
     } else {
+      roundTabLabel="Advance to Round 1 to see round gains.";
+      roundRanked=null;
+    }
+
+    if(lbRoundEl) lbRoundEl.textContent=roundTabLabel;
+
+    if(!roundRanked){
+      listR.innerHTML=`<div style="padding:1.5rem;text-align:center;font-size:.82rem;color:var(--muted)">${roundTabLabel}</div>`;
+    } else {
+      const maxPct=Math.max(...roundRanked.map(p=>Math.abs(p.pct)),0.1);
+      const MEDALS=["🥇","🥈","🥉"];
+      const BAR_COLORS=["#FFB400","#b0bec5","#cd8c4a","#4da6ff","#00c97a","#a78bfa","#637089","#637089","#637089","#637089"];
       roundRanked.forEach((p,i)=>{
         const isMe=p.name===currentPlayer;
         const barColor=BAR_COLORS[i]||"#637089";
@@ -1549,7 +1591,7 @@ function renderLeaderboard(){
     }
   }
 
-  // ── TOP MOVERS & ROUND SUMMARY (unchanged) ──
+  // ── TOP MOVERS & ROUND SUMMARY ──
   const movEl=document.getElementById("topMovers");
   if(!gs.prevLadder){movEl.innerHTML=`<div class="empty-state"><div class="empty-icon">📊</div>Advance to Round 1.</div>`;}
   else{
@@ -1573,6 +1615,8 @@ function renderLeaderboard(){
     </div>
     <button class="btn sm" style="margin-top:.75rem;width:100%" onclick="refreshState()">🔄 Refresh</button>`;
 }
+
+
 
 function renderAdmin(){
   loadResearchLog();
