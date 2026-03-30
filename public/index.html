@@ -68,6 +68,7 @@ nav button.active{color:var(--accent);background:rgba(255,180,0,.08)}
 /* LAYOUT */
 main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
 .two-col{display:grid;grid-template-columns:1fr 1fr;gap:1.1rem}
+.market-wrap{max-width:900px;margin:0 auto}
 
 /* CARDS */
 .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:1.1rem}
@@ -92,7 +93,7 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
 .ladder-tbl th{font-size:.6rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted);padding:.5rem .75rem;text-align:left;border-bottom:1px solid var(--border);white-space:nowrap}
 .ladder-tbl th.r{text-align:right}
 .ladder-tbl th.c{text-align:center}
-.ladder-tbl td{padding:.55rem .75rem;font-size:.82rem;border-bottom:1px solid rgba(30,45,69,.35);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ladder-tbl td{padding:.55rem .75rem;font-size:.82rem;border-bottom:1px solid rgba(30,45,69,.35);white-space:nowrap}
 .ladder-tbl tr:hover td{background:rgba(255,255,255,.015)}
 .ladder-tbl tr.top4 td{background:rgba(255,180,0,.02)}
 .ladder-tbl tr.top4:hover td{background:rgba(255,180,0,.04)}
@@ -233,6 +234,7 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
 /* Portfolio layout */
 .port-layout{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
 .port-tradelog{}
+@media(max-width:640px){.market-wrap{max-width:none}}
 @media(max-width:640px){
   .port-layout{grid-template-columns:1fr}
   .player-tabs{flex-wrap:nowrap;overflow-x:auto;padding-bottom:.25rem;scrollbar-width:none}
@@ -277,7 +279,7 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
     <nav>
       <button class="active" onclick="showTab('market',this)">📈 Market</button>
       <button onclick="showTab('portfolio',this)">💼 Portfolio</button>
-      <button onclick="showTab('leaderboard',this)">🏆 Leaderboard</button>
+      <button onclick="showTab('leaderboard',this)">🏆 Rankings</button>
       <button onclick="showTab('rules',this)">📋 Rules</button>
       <button id="adminNavBtn" onclick="showTab('admin',this)" style="display:none">⚙ Admin</button>
     </nav>
@@ -297,6 +299,7 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
     <!-- MARKET -->
     <div class="page active" id="tab-market">
 
+      <div class="market-wrap">
       <div id="tradingBanner" class="banner open">
         <div><span class="dot live"></span><strong>Trading Open</strong></div>
       </div>
@@ -338,12 +341,12 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
               <col style="width:44px">
               <col style="width:36px">
               <col>
-              <col style="width:80px">
-              <col style="width:80px">
-              <col style="width:80px">
-              <col style="width:48px">
-              <col style="width:72px">
-              <col style="width:100px">
+              <col style="width:90px">
+              <col style="width:86px">
+              <col style="width:60px">
+              <col style="width:70px">
+              <col style="width:90px">
+              <col style="width:120px">
             </colgroup>
             <thead><tr>
               <th>Pos</th>
@@ -387,6 +390,8 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
 
       </div>
 
+      </div><!-- /market-wrap -->
+
       <!-- Mobile holdings -->
       <div class="mob-holdings" id="mobHoldings" style="display:none">
         <div class="mob-holdings-hd">
@@ -422,14 +427,14 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
         <button id="lbTab1" class="lb-tab-pill" onclick="switchLbTab(1)">This Round</button>
       </div>
       <!-- Overall rankings -->
-      <div id="lbPanelOverall" style="max-width:640px">
+      <div id="lbPanelOverall" style="max-width:640px;margin:0 auto">
         <div style="display:flex;justify-content:space-between;align-items:center;padding:.4rem 1rem;border-bottom:1px solid rgba(30,45,69,.2)">
           <span style="font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)" id="lbRoundLabel">Pre-Season</span>
         </div>
         <div id="lbList"></div>
       </div>
       <!-- This Round rankings -->
-      <div id="lbPanelRound" style="display:none;max-width:640px">
+      <div id="lbPanelRound" style="display:none;max-width:640px;margin:0 auto">
         <div style="padding:.4rem 1rem;border-bottom:1px solid rgba(30,45,69,.2)">
           <span style="font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)" id="lbRoundLabelR">Round — biggest % gain from round start</span>
         </div>
@@ -892,7 +897,7 @@ function renderAll(){
   updateHeaderUI();
   renderLadder();
   renderPortfolio();
-  renderLeaderboard();
+  renderRankings();
   if(currentPlayer==="Tyson") renderAdmin();
 }
 
@@ -1458,7 +1463,7 @@ function switchLbTab(idx){
   document.getElementById("lbTab1").className="lb-tab-pill"+(idx===1?" active":"");
 }
 
-function renderLeaderboard(){
+function renderRankings(){
   const gs=gameState;
   const deadline=gs.tradeDeadline?new Date(gs.tradeDeadline).getTime():null;
   const isLocked=deadline&&Date.now()>deadline;
