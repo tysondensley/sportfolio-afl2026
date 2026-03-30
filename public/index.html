@@ -1541,7 +1541,7 @@ function renderRankings(){
       }).sort((a,b)=>b.pct-a.pct);
     } else if(gs.snapshot && gs.previousState && gs.previousState.snapshot){
       // Trading window — show completed previous round's gains
-      const prevRoundLabel=getRoundFullLabel(gs.previousState.round);
+      const prevRoundLabel=getRoundFullLabel(gs.round-1);
       roundTabLabel=`${prevRoundLabel} · % gain for the round`;
       roundRanked=ALL_PLAYERS.map(n=>{
         const endVal=gs.snapshot[n]?gs.snapshot[n].total:10000;
