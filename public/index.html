@@ -421,13 +421,14 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
 
     <!-- LEADERBOARD -->
     <div class="page" id="tab-leaderboard">
+      <div style="max-width:640px;margin:0 auto">
       <!-- Tab pills -->
-      <div style="display:flex;gap:6px;padding:10px 12px;background:var(--bg);border-bottom:1px solid var(--border)">
+      <div style="display:flex;gap:6px;padding:10px 0;border-bottom:1px solid var(--border)">
         <button id="lbTab0" class="lb-tab-pill active" onclick="switchLbTab(0)">Overall</button>
         <button id="lbTab1" class="lb-tab-pill" onclick="switchLbTab(1)">This Round</button>
       </div>
       <!-- Overall rankings -->
-      <div id="lbPanelOverall" style="max-width:640px;margin:0 auto">
+      <div id="lbPanelOverall">
         <div style="display:flex;justify-content:space-between;align-items:center;padding:.4rem 1rem;border-bottom:1px solid rgba(30,45,69,.2)">
           <span style="font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)" id="lbRoundLabel">Pre-Season</span>
         </div>
@@ -440,6 +441,7 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
         </div>
         <div id="lbListRound"></div>
       </div>
+      </div><!-- end max-width wrapper -->
       <!-- Bottom widgets in two-col on desktop -->
       <div class="two-col" style="margin-top:1rem">
         <div class="card" style="margin-bottom:1rem">
@@ -1593,7 +1595,8 @@ function renderRankings(){
       }).sort((a,b)=>b.pct-a.pct);
     } else if(gs.snapshot && gs.previousState && gs.previousState.snapshot){
       // Trading window — show completed previous round's gains
-      const prevRoundLabel=getRoundFullLabel(gs.round-1);
+      const prevRoundNum=(gs.previousState&&gs.previousState.round)?gs.previousState.round:gs.round-1;
+      const prevRoundLabel=getRoundFullLabel(prevRoundNum);
       roundTabLabel=`${prevRoundLabel} · % gain for the round`;
       roundRanked=ALL_PLAYERS.map(n=>{
         const endVal=gs.snapshot[n]?gs.snapshot[n].total:10000;
