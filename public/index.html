@@ -154,7 +154,12 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
 .hold-tag{font-size:.62rem;padding:.18rem .45rem;border-radius:4px;background:rgba(255,180,0,.1);color:var(--accent);border:1px solid rgba(255,180,0,.2);font-family:'DM Mono',monospace;white-space:nowrap}
 
 /* LEADERBOARD */
-.lb-row{display:grid;grid-template-columns:40px 1fr auto auto;align-items:center;gap:1rem;padding:.75rem 1.1rem;border-bottom:1px solid rgba(30,45,69,.35);cursor:pointer;transition:background .15s}
+.lb-tab-pill{flex:1;padding:6px 0;text-align:center;font-size:.72rem;font-weight:700;border-radius:7px;border:1px solid var(--border);background:var(--surface);color:var(--muted);cursor:pointer;letter-spacing:.04em;font-family:'DM Sans',sans-serif}
+.lb-tab-pill.active{background:rgba(255,180,0,.1);border-color:rgba(255,180,0,.35);color:var(--accent)}
+.lb-row{display:grid;grid-template-columns:36px 1fr auto;align-items:center;gap:.75rem;padding:.65rem 1rem;border-bottom:1px solid rgba(30,45,69,.35);cursor:pointer;transition:background .15s}
+.lb-row-logos{display:flex;gap:3px;margin-top:3px;flex-wrap:wrap}
+.wk-row{display:flex;align-items:center;gap:10px;padding:.65rem 1rem;border-bottom:1px solid rgba(30,45,69,.35)}
+.wk-row.me{background:rgba(255,180,0,.04);border-left:2px solid var(--accent)}
 .lb-row:last-child{border-bottom:none}
 .lb-row:hover{background:rgba(255,255,255,.02)}
 .lb-row.me{background:rgba(255,180,0,.04);border-left:2px solid var(--accent)}
@@ -411,22 +416,36 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
 
     <!-- LEADERBOARD -->
     <div class="page" id="tab-leaderboard">
-      <div class="two-col">
-        <div class="card">
-          <div class="card-hd"><div class="card-title">Rankings</div><div style="font-size:.72rem;color:var(--muted)" id="lbRoundLabel">Pre-Season</div></div>
-          <div id="lbList"></div>
+      <!-- Tab pills -->
+      <div style="display:flex;gap:6px;padding:10px 12px;background:var(--bg);border-bottom:1px solid var(--border)">
+        <button id="lbTab0" class="lb-tab-pill active" onclick="switchLbTab(0)">Overall</button>
+        <button id="lbTab1" class="lb-tab-pill" onclick="switchLbTab(1)">This Round</button>
+      </div>
+      <!-- Overall rankings -->
+      <div id="lbPanelOverall">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:.4rem 1rem;border-bottom:1px solid rgba(30,45,69,.2)">
+          <span style="font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)" id="lbRoundLabel">Pre-Season</span>
         </div>
-        <div>
-          <div class="card" style="margin-bottom:1rem">
-            <div class="card-hd"><div class="card-title">Top Movers</div></div>
-            <div class="card-body" id="topMovers"><div class="empty-state"><div class="empty-icon">📊</div>Advance to Round 1 to see movers.</div></div>
-          </div>
-          <div class="card">
-            <div class="card-hd"><div class="card-title">Round Summary</div></div>
-            <div class="card-body" id="roundSummary">
-              <div style="font-size:.82rem;color:var(--muted)">Advance to Round 1 to see results.</div>
-              <button class="btn sm" style="margin-top:.75rem;width:100%" onclick="refreshState()">🔄 Refresh</button>
-            </div>
+        <div id="lbList"></div>
+      </div>
+      <!-- This Round rankings -->
+      <div id="lbPanelRound" style="display:none">
+        <div style="padding:.4rem 1rem;border-bottom:1px solid rgba(30,45,69,.2)">
+          <span style="font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)" id="lbRoundLabelR">Round — biggest % gain from round start</span>
+        </div>
+        <div id="lbListRound"></div>
+      </div>
+      <!-- Bottom widgets in two-col on desktop -->
+      <div class="two-col" style="margin-top:1rem">
+        <div class="card" style="margin-bottom:1rem">
+          <div class="card-hd"><div class="card-title">Top Movers</div></div>
+          <div class="card-body" id="topMovers"><div class="empty-state"><div class="empty-icon">📊</div>Advance to Round 1 to see movers.</div></div>
+        </div>
+        <div class="card">
+          <div class="card-hd"><div class="card-title">Round Summary</div></div>
+          <div class="card-body" id="roundSummary">
+            <div style="font-size:.82rem;color:var(--muted)">Advance to Round 1 to see results.</div>
+            <button class="btn sm" style="margin-top:.75rem;width:100%" onclick="refreshState()">🔄 Refresh</button>
           </div>
         </div>
       </div>
@@ -1432,13 +1451,25 @@ function drawHistoryChart(gs, focusPlayer){
   }
 }
 
+function switchLbTab(idx){
+  document.getElementById("lbPanelOverall").style.display=idx===0?"block":"none";
+  document.getElementById("lbPanelRound").style.display=idx===1?"block":"none";
+  document.getElementById("lbTab0").className="lb-tab-pill"+(idx===0?" active":"");
+  document.getElementById("lbTab1").className="lb-tab-pill"+(idx===1?" active":"");
+}
+
 function renderLeaderboard(){
   const gs=gameState;
   const deadline=gs.tradeDeadline?new Date(gs.tradeDeadline).getTime():null;
   const isLocked=deadline&&Date.now()>deadline;
   const useSnapshot=!isLocked&&gs.round>0&&gs.snapshot;
   const getVal=(name)=>(useSnapshot&&gs.snapshot&&gs.snapshot[name])?gs.snapshot[name].total:getTotal(gs.players[name]);
+
+  // ── OVERALL TAB ──
   const ranked=ALL_PLAYERS.map(n=>({name:n,val:getVal(n),isH:HUMAN_PLAYERS.includes(n)})).sort((a,b)=>b.val-a.val);
+  const roundLabel=getRoundFullLabel(gs.round);
+  document.getElementById("lbRoundLabel").textContent=roundLabel;
+
   const list=document.getElementById("lbList");
   list.innerHTML="";
   ranked.forEach((p,i)=>{
@@ -1446,26 +1477,85 @@ function renderLeaderboard(){
     const chg=p.val-10000;
     const rankColor=rank===1?"var(--accent)":rank===2?"#b0bec5":rank===3?"#cd8c4a":"var(--dim)";
     const isMe=p.name===currentPlayer;
+    // Holdings logos
+    const holdings=gs.players[p.name].holdings;
+    const heldTeams=[...new Set(holdings.map(h=>h.team))];
+    const logosHtml=heldTeams.map(t=>teamLogoEl(t,16)).join("");
     const div=document.createElement("div");
     div.className=`lb-row ${isMe?"me":""}`;
     div.innerHTML=`
-      <div class="rank-n" style="color:${rankColor}">${rank}</div>
-      <div><span style="font-weight:600;font-size:.88rem">${p.name}</span>
-        ${isMe?`<span style="font-size:.58rem;color:var(--accent);background:rgba(255,180,0,.1);padding:.1rem .35rem;border-radius:3px;margin-left:.4rem;font-family:'DM Mono',monospace">YOU</span>`:""}
-        ${!p.isH?`<span style="font-size:.58rem;color:var(--muted);background:var(--surface2);padding:.1rem .35rem;border-radius:3px;margin-left:.4rem;font-family:'DM Mono',monospace">AI</span>`:""}
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:1.4rem;color:${rankColor};text-align:center;line-height:1">${rank}</div>
+      <div>
+        <div style="display:flex;align-items:center;gap:.3rem;font-weight:600;font-size:.88rem">
+          ${p.name}
+          ${isMe?`<span style="font-size:.58rem;color:var(--accent);background:rgba(255,180,0,.1);padding:.1rem .35rem;border-radius:3px;font-family:'DM Mono',monospace">YOU</span>`:""}
+          ${!p.isH?`<span style="font-size:.58rem;color:var(--muted);background:var(--surface2);padding:.1rem .35rem;border-radius:3px;font-family:'DM Mono',monospace">AI</span>`:""}
+        </div>
+        <div class="lb-row-logos">${logosHtml}</div>
       </div>
-      <div style="font-family:'DM Mono',monospace;font-size:.88rem;text-align:right">${fmt(p.val)}</div>
-      <div style="font-family:'DM Mono',monospace;font-size:.78rem;color:${chg>=0?"var(--up)":"var(--down)"};text-align:right">${fmtP(chg/10000*100)}</div>`;
+      <div style="text-align:right">
+        <div style="font-family:'DM Mono',monospace;font-size:.88rem;font-weight:600">${fmt(p.val)}</div>
+        <div style="font-family:'DM Mono',monospace;font-size:.72rem;color:${chg>=0?"var(--up)":"var(--down)"}">${fmtP(chg/10000*100)}</div>
+      </div>`;
     div.onclick=()=>{viewingPlayer=p.name;showTab("portfolio",document.querySelectorAll("nav button")[1]);};
     list.appendChild(div);
   });
 
+  // ── THIS ROUND TAB ──
+  const lbRoundEl=document.getElementById("lbRoundLabelR");
+  if(lbRoundEl) lbRoundEl.textContent=`${roundLabel} · biggest % gain from round start`;
+
+  const listR=document.getElementById("lbListRound");
+  if(listR){
+    listR.innerHTML="";
+    // Calculate round gain — current vs snapshot at round start
+    const roundRanked=ALL_PLAYERS.map(n=>{
+      const cur=getTotal(gs.players[n]);
+      const base=gs.snapshot&&gs.snapshot[n]?gs.snapshot[n].total:10000;
+      const pct=base>0?(cur-base)/base*100:0;
+      return {name:n,pct,isH:HUMAN_PLAYERS.includes(n)};
+    }).sort((a,b)=>b.pct-a.pct);
+
+    const maxPct=Math.max(...roundRanked.map(p=>Math.abs(p.pct)),0.1);
+    const MEDALS=["🥇","🥈","🥉"];
+    const BAR_COLORS=["#FFB400","#b0bec5","#cd8c4a","#4da6ff","#00c97a","#a78bfa","#637089","#637089","#637089","#637089"];
+
+    if(!gs.snapshot){
+      listR.innerHTML=`<div style="padding:1.5rem;text-align:center;font-size:.82rem;color:var(--muted)">Advance to Round 1 to see round gains.</div>`;
+    } else {
+      roundRanked.forEach((p,i)=>{
+        const isMe=p.name===currentPlayer;
+        const barColor=BAR_COLORS[i]||"#637089";
+        const barW=Math.max(Math.abs(p.pct)/maxPct*100,2);
+        const medal=i<3?MEDALS[i]:"";
+        const div=document.createElement("div");
+        div.className=`wk-row ${isMe?"me":""}`;
+        div.innerHTML=`
+          <div style="width:28px;height:28px;border-radius:50%;background:${medal?`rgba(255,180,0,.08)`:"transparent"};display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">${medal}</div>
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:.3rem;font-size:.82rem;font-weight:600;margin-bottom:3px">
+              ${p.name}
+              ${isMe?`<span style="font-size:.58rem;color:var(--accent);background:rgba(255,180,0,.1);padding:.1rem .35rem;border-radius:3px;font-family:'DM Mono',monospace">YOU</span>`:""}
+              ${!p.isH?`<span style="font-size:.58rem;color:var(--muted);background:var(--surface2);padding:.1rem .35rem;border-radius:3px;font-family:'DM Mono',monospace">AI</span>`:""}
+            </div>
+            <div style="height:5px;background:var(--surface2);border-radius:3px;overflow:hidden">
+              <div style="height:5px;width:${barW}%;background:${p.pct<0?"#ff4f6d":barColor};border-radius:3px;opacity:${p.pct<0?0.5:1}"></div>
+            </div>
+          </div>
+          <div style="font-family:'DM Mono',monospace;font-size:.88rem;font-weight:700;color:${p.pct>=0?barColor:"#ff4f6d"};min-width:52px;text-align:right">${p.pct>=0?"+":""}${p.pct.toFixed(1)}%</div>`;
+        div.onclick=()=>{viewingPlayer=p.name;showTab("portfolio",document.querySelectorAll("nav button")[1]);};
+        listR.appendChild(div);
+      });
+    }
+  }
+
+  // ── TOP MOVERS & ROUND SUMMARY (unchanged) ──
   const movEl=document.getElementById("topMovers");
   if(!gs.prevLadder){movEl.innerHTML=`<div class="empty-state"><div class="empty-icon">📊</div>Advance to Round 1.</div>`;}
   else{
     const movers=gs.ladder.map((t,i)=>({name:t.name,chg:(gs.prevLadder.findIndex(p=>p.name===t.name))-i,pos:i+1})).sort((a,b)=>Math.abs(b.chg)-Math.abs(a.chg)).slice(0,6);
     movEl.innerHTML=movers.map(m=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:.4rem 0;border-bottom:1px solid rgba(30,45,69,.3);font-size:.82rem">
-        <div style="display:flex;align-items:center;gap:.4rem">${teamLogo(m.name,'team-logo-sm')}${m.name}</div>
+        <div style="display:flex;align-items:center;gap:.4rem">${teamLogo(m.name,"team-logo-sm")}${m.name}</div>
         <div style="display:flex;gap:.75rem;align-items:center">
           <span style="font-family:'DM Mono',monospace;font-size:.75rem;color:${m.chg>0?"var(--up)":m.chg<0?"var(--down)":"var(--muted)"}">${m.chg>0?"▲":"▼"} ${Math.abs(m.chg)} places</span>
           <span style="font-family:'DM Mono',monospace;color:var(--accent);font-size:.75rem">$${PRICE_SCALE[m.pos].toFixed(2)}</span>
@@ -1831,5 +1921,4 @@ function closeTradeOverlay(){
 initLogin();
 </script>
 </body>
-</html>
 </html>
