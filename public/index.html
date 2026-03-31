@@ -386,7 +386,7 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
           <tbody id="ladderBodyMob"></tbody>
         </table>
 
-        <div style="padding:.45rem .75rem;font-size:.65rem;color:var(--dim);border-top:1px solid rgba(30,45,69,.3)">⭐ Top 4 earn interest &nbsp;·&nbsp; ⚠ Last team taxed</div>
+        <div style="padding:.45rem .75rem;font-size:.65rem;color:var(--dim);border-top:1px solid rgba(30,45,69,.3)">⭐ Top 4 earn interest &nbsp;·&nbsp; ⚠ Last team taxed &nbsp;·&nbsp; 💸 Brokerage 0.5%, doubles each trade</div>
 
       </div>
 
@@ -938,7 +938,7 @@ function updateHeaderUI(){
       deadlineHtml=`<span style="font-family:'DM Mono',monospace;font-size:.72rem;color:var(--muted);margin-left:.75rem">No deadline set</span>`;
     }
     banner.className="banner open";
-    banner.innerHTML=`<div><span class="dot live"></span><strong>${getRoundName(gs.round)} Complete — Trading Open</strong>${deadlineHtml}</div><div style="font-family:'DM Mono',monospace;font-size:.75rem;color:var(--muted)">Brokerage: 0.5% · doubles each trade · Portfolios hidden until deadline</div>`;
+    banner.innerHTML=`<div><span class="dot live"></span><strong>${getRoundName(gs.round)} Complete — Trading Open</strong>${deadlineHtml}</div>`;
   }
 
   const myP=gs.players[currentPlayer];
