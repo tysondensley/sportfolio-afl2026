@@ -218,7 +218,7 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
 .admin-input{width:38px;background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:'DM Mono',monospace;font-size:.78rem;padding:.28rem .4rem;border-radius:5px;text-align:center;outline:none}
 .admin-input.pct{width:56px}
 .admin-input:focus{border-color:var(--accent)}
-.opp-chip{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:5px;background:var(--surface2);border:1px solid var(--border);cursor:default;position:relative;margin-right:2px;overflow:hidden}
+.opp-chip{display:inline-flex;flex-direction:column;align-items:center;justify-content:center;width:24px;height:28px;border-radius:5px;background:var(--surface2);border:1px solid var(--border);cursor:default;position:relative;margin-right:2px;overflow:hidden}
 .opp-chip:hover::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 4px);left:50%;transform:translateX(-50%);background:#1a2540;border:1px solid var(--border);color:var(--text);font-size:.68rem;white-space:nowrap;padding:.25rem .5rem;border-radius:5px;pointer-events:none;z-index:200}
 .opp-bye{background:rgba(99,112,137,.15);color:var(--muted);font-family:'DM Mono',monospace;font-size:.62rem;font-weight:700}
 /* Mobile opp chips — smaller */
@@ -729,8 +729,8 @@ function teamLogoEl(name,size){
 function oppChipDesktop(oppName,rLabel,isHome){
   const haColor=isHome?"var(--up)":"var(--down)";
   const haLabel=isHome?"H":"A";
-  const inner=LOGOS[oppName]?`<img src="${LOGOS[oppName]}" alt="${oppName}" style="width:20px;height:20px;object-fit:contain" onerror="this.style.display='none'">`:(oppName.slice(0,2));
-  return `<span class="opp-chip" data-tip="${rLabel} · vs ${oppName} (${isHome?'Home':'Away'})">${inner}<span style="font-size:.5rem;font-family:'DM Mono',monospace;color:${haColor};margin-left:.06rem">${haLabel}</span></span>`;
+  const inner=LOGOS[oppName]?`<img src="${LOGOS[oppName]}" alt="${oppName}" style="width:20px;height:20px;object-fit:contain;display:block" onerror="this.style.display='none'">`:(oppName.slice(0,2));
+  return `<span class="opp-chip" data-tip="${rLabel} · vs ${oppName} (${isHome?'Home':'Away'})" style="flex-direction:column;gap:0;height:28px;width:24px">${inner}<span style="font-size:.48rem;font-family:'DM Mono',monospace;color:${haColor};line-height:1;font-weight:700">${haLabel}</span></span>`;
 }
 function oppChipMobile(oppName,rLabel,isHome){
   const haColor=isHome?"var(--up)":"var(--down)";
@@ -813,7 +813,7 @@ async function initLogin(){
   container.innerHTML="";
   HUMAN_PLAYERS.forEach(name=>{
     const p=gameState?.players[name];
-    const total=p?getTotal(p):10000;
+    const snap=gameState?.snapshot?.[name];const total=snap?snap.total:(p?getTotal(p):10000);
     const btn=document.createElement("button");
     btn.className="player-btn";
     btn.innerHTML=`<span style="font-size:1.2rem">👤</span><span>${name}</span><span class="pval">${fmt(total)}</span>`;
@@ -1046,6 +1046,7 @@ function buildLadderRow(team, idx, gs, myP, displayP, isOpen, isLocked, isMobile
       <td style="text-align:right;font-family:'DM Mono',monospace;color:var(--muted)">${gs.round>0?team.pct.toFixed(1):"—"}</td>
       <td style="text-align:right">${holdHtml}</td>
       <td style="text-align:center">${fixtureHtml}</td>
+      <td style="text-align:center;padding:0 4px"><button ${tradeBtnActive?`onclick="openTradeOverlay('${team.name.replace(/'/g,"\'")}',${hasHolding?1:0})"`:'disabled'} style="width:26px;height:26px;border-radius:5px;background:${tradeBtnActive?tradeBtnColor:'rgba(77,100,140,.15)'};border:1px solid ${tradeBtnActive?tradeBtnBorder:'rgba(77,100,140,.35)'};display:inline-flex;align-items:center;justify-content:center;font-size:13px;padding:0;color:${tradeBtnActive?'var(--text)':'#637089'};cursor:${tradeBtnActive?'pointer':'default'};opacity:${tradeBtnActive?'1':'.45'}">⇄</button></td>
     </tr>`;
   }
 }
