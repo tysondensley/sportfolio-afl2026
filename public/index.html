@@ -1016,12 +1016,12 @@ function buildLadderRow(team, idx, gs, myP, displayP, isOpen, isLocked, isMobile
   // Interest/tax note (desktop only)
   const interestNote=pos<=4?`<span style="font-size:.56rem;color:var(--up);margin-left:.3rem">+${INTEREST_RATES[pos]*100}%</span>`:pos===18?`<span style="font-size:.56rem;color:var(--down);margin-left:.3rem">-1%</span>`:"";
 
+  const hasHolding=myHTotalShares>0;
+  const tradeBtnColor=hasHolding?"rgba(77,166,255,.15)":"rgba(255,180,0,.1)";
+  const tradeBtnBorder=hasHolding?"rgba(77,166,255,.3)":"rgba(255,180,0,.25)";
+  const tradeBtnActive=!isLocked&&isOpen;
   if(isMobile){
     const posCls=pos<=4?"pos-top4":pos===18?"pos-bot":"pos-mid";
-    const hasHolding=myHTotalShares>0;
-    const tradeBtnColor=hasHolding?"rgba(77,166,255,.15)":"rgba(255,180,0,.1)";
-    const tradeBtnBorder=hasHolding?"rgba(77,166,255,.3)":"rgba(255,180,0,.25)";
-    const tradeBtnActive=!isLocked&&isOpen;
     const tradeBtn=`<td style="text-align:center;padding:0 2px"><button ${tradeBtnActive?`onclick="openTradeOverlay('${team.name.replace(/'/g,"\'")}',${hasHolding?1:0})"`:'disabled'} style="width:24px;height:24px;border-radius:5px;background:${tradeBtnActive?tradeBtnColor:'rgba(77,100,140,.15)'};border:1px solid ${tradeBtnActive?tradeBtnBorder:'rgba(77,100,140,.35)'};display:inline-flex;align-items:center;justify-content:center;font-size:12px;padding:0;color:${tradeBtnActive?'var(--text)':'#637089'};cursor:${tradeBtnActive?'pointer':'default'};opacity:${tradeBtnActive?'1':'.45'}">⇄</button></td>`;
     return `<tr class="${rowClass}">
       <td><span class="pos-sm ${posCls}" style="font-family:'DM Mono',monospace;font-size:.58rem">${pos}</span></td>
