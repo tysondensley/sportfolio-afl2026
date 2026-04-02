@@ -912,7 +912,6 @@ function getNextRoundName(r){return r===1?"Opening Round":"Round "+(r-1);}
 function updateHeaderUI(){
   const gs=gameState;
   document.getElementById("roundDisplay").textContent=getRoundLabel(gs.round);
-  document.getElementById("lbRoundLabel").textContent=getRoundFullLabel(gs.round);
   document.getElementById("adminRoundNum").textContent=getNextRoundName(gs.round+1);
   const now=Date.now();
   const deadline=gs.tradeDeadline?new Date(gs.tradeDeadline).getTime():null;
@@ -1524,13 +1523,17 @@ function renderRankings(){
   const isLocked=deadline&&Date.now()>deadline;
   const useSnapshot=!isLocked&&gs.round>0&&gs.snapshot;
 
-  // Overall value — freeze at round-start snapshot for ALL players during trading window
-  // This hides brokerage fees and trade activity until lockout
-  const getVal=(name)=>(gs.snapshot&&gs.snapshot[name]&&gs.round>0)?gs.snapshot[name].total:getTotal(gs.players[name]);
+  // Overall value:
+  // - During trading window: freeze at round-start snapshot (hides brokerage fees / trade activity)
+  // - During lockout (round in progress): use live values so rankings update as ladder shifts
+  // - Pre-season (no snapshot): use live totals
+  const getVal=(name)=>{
+    if(isLocked) return getTotal(gs.players[name]);
+    if(gs.snapshot&&gs.snapshot[name]&&gs.round>0) return gs.snapshot[name].total;
+    return getTotal(gs.players[name]);
+  };
 
-  // Holdings to display — always use snapshot so in-progress trades are hidden
-  // During trading window: show snapshot holdings (start of this round)
-  // Pre-round: fall back to live holdings
+  // Holdings to display — always use snapshot so in-progress trades are hidden from others
   const getDisplayHoldings=(name)=>{
     if(gs.snapshot&&gs.snapshot[name]&&gs.snapshot[name].holdings){
       return gs.snapshot[name].holdings;
@@ -1538,10 +1541,52 @@ function renderRankings(){
     return gs.players[name].holdings;
   };
 
+  // Build previous-round rank map from gs.history for position change arrows
+  // We want the rankings at the END of the previous completed round
+  // gs.history entries are appended on Advance Round and represent the snapshot totals at the start of each new round
+  // So "end of previous round" = gs.history entry for gs.round (i.e. the snapshot taken when this round started)
+  // "end of round before that" = gs.history entry for gs.round - 1
+  // During trading window: compare current snapshot (end of last round) vs previous snapshot
+  // During lockout: compare live rank vs snapshot rank (round-start)
+  const buildRankMap=(histEntry)=>{
+    if(!histEntry) return null;
+    return ALL_PLAYERS
+      .map(n=>({name:n,val:histEntry.totals[n]||0}))
+      .sort((a,b)=>b.val-a.val)
+      .reduce((acc,p,i)=>{acc[p.name]=i+1;return acc;},{});
+  };
+
+  const history=gs.history||[];
+  // prevRoundRankMap = ranks at end of the previous completed round
+  // During lockout: that's gs.history entry for gs.round (snapshot at start of this round = end of last round)
+  // During trading window: that's gs.history entry for gs.round - 1 (end of round before last)
+  let prevRoundRankMap=null;
+  if(isLocked){
+    // Compare vs round-start snapshot
+    const entry=history.find(h=>h.round===gs.round);
+    prevRoundRankMap=buildRankMap(entry);
+  } else if(gs.round>1){
+    // Trading window: compare vs end of round before this one (history entry for gs.round - 1)
+    const entry=history.find(h=>h.round===gs.round-1);
+    prevRoundRankMap=buildRankMap(entry);
+  } else if(gs.round===1 && history.length>0){
+    // Round 1 trading window: compare vs pre-season (history[0] if it exists)
+    prevRoundRankMap=buildRankMap(history[0]);
+  }
+
   // ── OVERALL TAB ──
   const ranked=ALL_PLAYERS.map(n=>({name:n,val:getVal(n),isH:HUMAN_PLAYERS.includes(n)})).sort((a,b)=>b.val-a.val);
   const roundLabel=getRoundFullLabel(gs.round);
-  document.getElementById("lbRoundLabel").textContent=roundLabel;
+
+  // Dynamic subheading based on state
+  const overallSubLabel=document.getElementById("lbRoundLabel");
+  if(isLocked){
+    overallSubLabel.innerHTML=`${roundLabel} &nbsp;·&nbsp; <span style="color:var(--up)">● Live — updates as games are played</span>`;
+  } else if(gs.round>0){
+    overallSubLabel.innerHTML=`${roundLabel} &nbsp;·&nbsp; <span style="color:var(--muted)">🔒 Frozen during trading window</span>`;
+  } else {
+    overallSubLabel.textContent=roundLabel;
+  }
 
   const list=document.getElementById("lbList");
   list.innerHTML="";
@@ -1553,6 +1598,17 @@ function renderRankings(){
     const displayHoldings=getDisplayHoldings(p.name);
     const heldTeams=[...new Set(displayHoldings.map(h=>h.team))];
     const logosHtml=heldTeams.map(t=>teamLogoEl(t,16)).join("");
+
+    // Position change arrow vs previous round end
+    let posArrow="";
+    if(prevRoundRankMap&&prevRoundRankMap[p.name]){
+      const prevRank=prevRoundRankMap[p.name];
+      const diff=prevRank-rank; // positive = climbed, negative = dropped
+      if(diff>0) posArrow=`<span style="font-size:.65rem;color:var(--up);font-family:'DM Mono',monospace;white-space:nowrap">▲${diff}</span>`;
+      else if(diff<0) posArrow=`<span style="font-size:.65rem;color:var(--down);font-family:'DM Mono',monospace;white-space:nowrap">▼${Math.abs(diff)}</span>`;
+      else posArrow=`<span style="font-size:.65rem;color:var(--dim);font-family:'DM Mono',monospace">—</span>`;
+    }
+
     const div=document.createElement("div");
     div.className=`lb-row ${isMe?"me":""}`;
     div.innerHTML=`
@@ -1562,6 +1618,7 @@ function renderRankings(){
           ${p.name}
           ${isMe?`<span style="font-size:.58rem;color:var(--accent);background:rgba(255,180,0,.1);padding:.1rem .35rem;border-radius:3px;font-family:'DM Mono',monospace">YOU</span>`:""}
           ${!p.isH?`<span style="font-size:.58rem;color:var(--muted);background:var(--surface2);padding:.1rem .35rem;border-radius:3px;font-family:'DM Mono',monospace">AI</span>`:""}
+          ${posArrow}
         </div>
         <div class="lb-row-logos">${logosHtml}</div>
       </div>
