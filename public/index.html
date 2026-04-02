@@ -157,7 +157,7 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
 /* LEADERBOARD */
 .lb-tab-pill{flex:1;padding:6px 0;text-align:center;font-size:.72rem;font-weight:700;border-radius:7px;border:1px solid var(--border);background:var(--surface);color:var(--muted);cursor:pointer;letter-spacing:.04em;font-family:'DM Sans',sans-serif}
 .lb-tab-pill.active{background:rgba(255,180,0,.1);border-color:rgba(255,180,0,.35);color:var(--accent)}
-.lb-row{display:grid;grid-template-columns:36px 1fr auto;align-items:center;gap:.75rem;padding:.65rem 1rem;border-bottom:1px solid rgba(30,45,69,.35);cursor:pointer;transition:background .15s}
+.lb-row{display:grid;grid-template-columns:36px 28px 1fr auto;align-items:center;gap:.75rem;padding:.65rem 1rem;border-bottom:1px solid rgba(30,45,69,.35);cursor:pointer;transition:background .15s}
 .lb-row-logos{display:flex;gap:3px;margin-top:3px;flex-wrap:wrap}
 .wk-row{display:flex;align-items:center;gap:10px;padding:.65rem 1rem;border-bottom:1px solid rgba(30,45,69,.35)}
 .wk-row.me{background:rgba(255,180,0,.04);border-left:2px solid var(--accent)}
@@ -1581,7 +1581,7 @@ function renderRankings(){
   // Dynamic subheading based on state
   const overallSubLabel=document.getElementById("lbRoundLabel");
   if(isLocked){
-    overallSubLabel.innerHTML=`${roundLabel} &nbsp;·&nbsp; <span style="color:var(--up)">● Live — updates as games are played</span>`;
+    overallSubLabel.innerHTML=`<span style="color:var(--up)">● Live — updates as games are played</span>`;
   } else if(gs.round>0){
     overallSubLabel.innerHTML=`${roundLabel} &nbsp;·&nbsp; <span style="color:var(--muted)">🔒 Frozen during trading window</span>`;
   } else {
@@ -1613,12 +1613,12 @@ function renderRankings(){
     div.className=`lb-row ${isMe?"me":""}`;
     div.innerHTML=`
       <div style="font-family:'Bebas Neue',sans-serif;font-size:1.4rem;color:${rankColor};text-align:center;line-height:1">${rank}</div>
+      <div style="width:28px;text-align:center;flex-shrink:0">${posArrow}</div>
       <div>
         <div style="display:flex;align-items:center;gap:.3rem;font-weight:600;font-size:.88rem">
           ${p.name}
           ${isMe?`<span style="font-size:.58rem;color:var(--accent);background:rgba(255,180,0,.1);padding:.1rem .35rem;border-radius:3px;font-family:'DM Mono',monospace">YOU</span>`:""}
           ${!p.isH?`<span style="font-size:.58rem;color:var(--muted);background:var(--surface2);padding:.1rem .35rem;border-radius:3px;font-family:'DM Mono',monospace">AI</span>`:""}
-          ${posArrow}
         </div>
         <div class="lb-row-logos">${logosHtml}</div>
       </div>
@@ -1644,7 +1644,7 @@ function renderRankings(){
 
     if(isLocked && gs.snapshot){
       // Active round — live gains vs round start
-      roundTabLabel=`${roundLabel} · live gains during round`;
+      roundTabLabel=`<span style="color:var(--up)">● Live — updates as games are played</span>`;
       roundRanked=ALL_PLAYERS.map(n=>{
         const cur=getTotal(gs.players[n]);
         const base=gs.snapshot[n]?gs.snapshot[n].total:10000;
@@ -1674,7 +1674,7 @@ function renderRankings(){
       roundRanked=null;
     }
 
-    if(lbRoundEl) lbRoundEl.textContent=roundTabLabel;
+    if(lbRoundEl) lbRoundEl.innerHTML=roundTabLabel;
 
     if(!roundRanked){
       listR.innerHTML=`<div style="padding:1.5rem;text-align:center;font-size:.82rem;color:var(--muted)">${roundTabLabel}</div>`;
