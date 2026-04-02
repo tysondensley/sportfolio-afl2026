@@ -233,6 +233,28 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
 
 /* Portfolio layout */
 .port-layout{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+
+/* ── TWO-TIER TICKER ── */
+.ticker-wrap{width:100%;overflow:hidden;background:rgba(8,11,18,.97);border-bottom:1px solid var(--border);margin-bottom:1rem;margin-left:calc(-1.25rem);width:calc(100% + 2.5rem)}
+.ticker-row{display:flex;align-items:center;height:26px;overflow:hidden;position:relative}
+.ticker-row+.ticker-row{border-top:1px solid rgba(30,45,69,.5)}
+.ticker-label{flex-shrink:0;width:64px;font-size:.55rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;padding:0 .6rem;border-right:1px solid var(--border);height:100%;display:flex;align-items:center;z-index:2;background:rgba(8,11,18,.97)}
+.ticker-label.prices{color:var(--muted)}
+.ticker-label.news{color:var(--accent)}
+.ticker-track{display:flex;white-space:nowrap;will-change:transform}
+.ticker-track.prices{animation:tickerPrices 28s linear infinite}
+.ticker-track.news{animation:tickerNews 55s linear infinite}
+.ticker-item{display:inline-flex;align-items:center;gap:.35rem;padding:0 1.4rem;font-size:.7rem;height:26px}
+.ticker-item.price-item{color:#e8edf6;font-family:'DM Mono',monospace}
+.ticker-item.news-item{color:var(--accent);font-size:.68rem;font-style:italic}
+.ticker-sep{color:var(--dim);opacity:.5;font-size:.65rem}
+@keyframes tickerPrices{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+@keyframes tickerNews{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+@media(max-width:640px){
+  .ticker-wrap{margin-left:calc(-.5rem);width:calc(100% + 1rem)}
+  .ticker-label{width:52px;font-size:.5rem;padding:0 .4rem}
+  .ticker-item{padding:0 1rem;font-size:.65rem}
+}
 .port-tradelog{}
 @media(max-width:640px){.market-wrap{max-width:none}}
 @media(max-width:640px){
@@ -298,6 +320,22 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
   <main>
     <!-- MARKET -->
     <div class="page active" id="tab-market">
+
+      <!-- TWO-TIER TICKER -->
+      <div class="ticker-wrap" id="tickerWrap">
+        <div class="ticker-row">
+          <div class="ticker-label prices">Prices</div>
+          <div style="overflow:hidden;flex:1;position:relative">
+            <div class="ticker-track prices" id="tickerPrices"></div>
+          </div>
+        </div>
+        <div class="ticker-row">
+          <div class="ticker-label news">News</div>
+          <div style="overflow:hidden;flex:1;position:relative">
+            <div class="ticker-track news" id="tickerNews"></div>
+          </div>
+        </div>
+      </div>
 
       <div class="market-wrap">
       <div id="tradingBanner" class="banner open">
@@ -570,6 +608,20 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
             </div>
           </div>
           <div class="card" style="margin-bottom:1rem">
+            <div class="card" style="margin-bottom:1rem">
+              <div class="card-hd">
+                <div class="card-title">Market Headlines</div>
+                <div style="display:flex;gap:.5rem">
+                  <button class="btn sm" onclick="generateHeadlines()">⚡ Generate Now</button>
+                  <button class="btn primary sm" onclick="saveHeadlines()">Save Edits</button>
+                </div>
+              </div>
+              <div class="card-body">
+                <p style="font-size:.75rem;color:var(--muted);margin-bottom:.75rem">AI generates fresh headlines daily. Edit any line below and hit Save — your edits persist until the next auto-generation.</p>
+                <div id="headlineEditors"></div>
+                <div id="headlineStatus" style="font-size:.72rem;color:var(--muted);margin-top:.5rem"></div>
+              </div>
+            </div>
             <div class="card-hd"><div class="card-title">AI Research Log</div><button class="btn sm" onclick="loadResearchLog()">Refresh</button></div>
             <div class="card-body" id="researchLog"><div class="empty-state"><div class="empty-icon">🔬</div>No AI research yet.</div></div>
           </div>
@@ -897,10 +949,66 @@ initLogin();
 function renderAll(){
   if(!gameState||!currentPlayer) return;
   updateHeaderUI();
+  renderTicker();
   renderLadder();
   renderPortfolio();
   renderRankings();
   if(currentPlayer==="Tyson") renderAdmin();
+}
+
+function renderTicker(){
+  const gs=gameState;
+  const deadline=gs.tradeDeadline?new Date(gs.tradeDeadline).getTime():null;
+  const isLocked=deadline&&Date.now()>deadline;
+
+  // ── PRICES ROW ──
+  // Compare vs snapshotLadder (round start) during lockout, vs prevLadder during trading
+  const compareLadder=isLocked&&gs.snapshotLadder?gs.snapshotLadder:gs.prevLadder;
+  const pEl=document.getElementById("tickerPrices");
+  if(pEl&&compareLadder){
+    // Only show movers (price has changed)
+    const movers=gs.ladder.map((t,i)=>{
+      const pos=i+1;
+      const price=PRICE_SCALE[pos];
+      const prevPos=compareLadder.findIndex(p=>p.name===t.name);
+      const prevPrice=PRICE_SCALE[prevPos+1]||PRICE_SCALE[18];
+      const chg=price-prevPrice;
+      return{name:t.name,price,chg,pos};
+    }).filter(m=>Math.abs(m.chg)>0.005)
+      .sort((a,b)=>Math.abs(b.chg)-Math.abs(a.chg));
+
+    if(movers.length){
+      const items=movers.map(m=>{
+        const col=m.chg>0?"var(--up)":"var(--down)";
+        const sym=m.chg>0?"▲":"▼";
+        return `<span class="ticker-item price-item">`+
+          `${teamLogoEl(m.name,14)}`+
+          `<span>${m.name}</span>`+
+          `<span style="color:var(--muted)">$${m.price.toFixed(2)}</span>`+
+          `<span style="color:${col};font-size:.63rem">${sym}$${Math.abs(m.chg).toFixed(2)}</span>`+
+          `</span><span class="ticker-item ticker-sep">·</span>`;
+      }).join("");
+      // Duplicate for seamless loop
+      pEl.innerHTML=items+items;
+    } else {
+      // No movers yet — show all prices briefly
+      pEl.innerHTML=`<span class="ticker-item price-item" style="color:var(--muted)">No price changes yet this round</span>`;
+    }
+  } else if(pEl){
+    pEl.innerHTML=`<span class="ticker-item price-item" style="color:var(--muted)">Prices update after Round 1</span>`;
+  }
+
+  // ── NEWS ROW ──
+  const nEl=document.getElementById("tickerNews");
+  if(nEl){
+    const headlines=gs.headlines&&gs.headlines.items&&gs.headlines.items.length
+      ?gs.headlines.items
+      :["AFL Market Intelligence — prices update each round as the ladder shifts","Check your portfolio and make your moves before the trading window closes"];
+    const items=headlines.map(h=>
+      `<span class="ticker-item news-item">${h}</span><span class="ticker-item ticker-sep" style="color:var(--accent);opacity:.4">◆</span>`
+    ).join("");
+    nEl.innerHTML=items+items;
+  }
 }
 
 function getRoundLabel(r){if(r===0)return"PRE";if(r===1)return"R1";if(r>=10)return"R9";return"R"+r;}
@@ -1737,6 +1845,7 @@ function renderRankings(){
 
 function renderAdmin(){
   loadResearchLog();
+  renderHeadlineEditors();
   updateSquiggleStatus();
   const gs=gameState;
   const inputs=document.getElementById("adminInputs");
@@ -1820,6 +1929,52 @@ async function triggerAIPreseason(){
   showToast("success","AI Researching...","Pre-season trades in progress.");
   try{const data=await api("/api/admin/ai-preseason","POST",{playerName:"Tyson"});gameState=data.state;renderAll();loadResearchLog();showToast("success","Done","AI pre-season trades complete.");}
   catch(e){showToast("error","Failed",e.message);}
+}
+
+function renderHeadlineEditors(){
+  const gs=gameState;
+  const el=document.getElementById("headlineEditors");
+  const statusEl=document.getElementById("headlineStatus");
+  if(!el) return;
+  const headlines=gs.headlines;
+  const items=headlines&&headlines.items&&headlines.items.length
+    ?headlines.items
+    :["","","","",""];
+  el.innerHTML=items.map((h,i)=>
+    `<div style="margin-bottom:.5rem">
+      <textarea id="hl_${i}" rows="2" style="width:100%;background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:'DM Sans',sans-serif;font-size:.75rem;padding:.45rem .6rem;border-radius:6px;resize:vertical;line-height:1.5;outline:none">${h}</textarea>
+    </div>`
+  ).join("");
+  if(statusEl&&headlines&&headlines.generatedAt){
+    const d=new Date(headlines.generatedAt);
+    statusEl.textContent=`Last generated: ${d.toLocaleString()}`;
+  } else if(statusEl){
+    statusEl.textContent="No headlines generated yet.";
+  }
+}
+
+async function generateHeadlines(){
+  const btn=event.target;btn.disabled=true;btn.textContent="Generating...";
+  try{
+    const data=await api("/api/admin/generate-headlines","POST",{playerName:"Tyson"});
+    gameState=data.state;renderAll();
+    showToast("success","Headlines generated","New AI market commentary ready.");
+  } catch(e){showToast("error","Failed",e.message);}
+  finally{btn.disabled=false;btn.textContent="⚡ Generate Now";}
+}
+
+async function saveHeadlines(){
+  const items=[];
+  let i=0;
+  while(document.getElementById(`hl_${i}`)){
+    items.push(document.getElementById(`hl_${i}`).value.trim());
+    i++;
+  }
+  try{
+    const data=await api("/api/admin/headlines","POST",{playerName:"Tyson",items});
+    gameState=data.state;renderTicker();renderHeadlineEditors();
+    showToast("success","Headlines saved","Ticker updated.");
+  } catch(e){showToast("error","Save failed",e.message);}
 }
 
 async function loadResearchLog(){
