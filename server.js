@@ -717,22 +717,24 @@ async function generateAIHeadlines(gs) {
     return `${t.name}: now pos ${pos} ($${price.toFixed(2)}, ${chgStr} from pos ${prevPos + 1})`;
   }).join("\n");
 
-  // Trade deadline context
+  // Work out which AFL round to search for and trade deadline context
+  // During lockout: gs.round games are currently being played — search for those results
+  // During trading window: gs.round-1 games have just finished — search for those results
   const deadline = gs.tradeDeadline ? new Date(gs.tradeDeadline) : null;
   const isLocked = deadline && Date.now() > deadline.getTime();
+  const aflRoundNum = isLocked ? gs.round : Math.max(1, gs.round - 1);
+  const roundLabel = aflRoundNum === 1 ? "Opening Round 2026" : `Round ${aflRoundNum} 2026`;
+  const searchQuery = `AFL ${roundLabel} results scores`;
   const deadlineContext = deadline && !isLocked
     ? `Trading window closes: ${deadline.toLocaleDateString('en-AU', { weekday:'long', day:'numeric', month:'long' })} at ${deadline.toLocaleTimeString('en-AU', { hour:'numeric', minute:'2-digit', hour12:true })}`
     : null;
 
-  // Work out which AFL round to search for
-  const aflRound = gs.round;
-  const roundLabel = aflRound === 1 ? "Opening Round 2026" : `Round ${aflRound - 1} 2026`;
-
   const prompt = `You are a witty financial market commentator covering a fantasy AFL sharemarket game called Sportfolio. Players buy and sell AFL team "shares" — prices rise when teams climb the ladder, fall when they drop.
 
 YOUR TASK:
-1. Use web_search to find the actual AFL ${roundLabel} match results and scores from this weekend
-2. Write exactly 5 punchy, entertaining "market headlines" that blend AFL match news with sharemarket language
+1. Use web_search to search for "${searchQuery}" — find the actual match results, scores and key moments from ${roundLabel}
+2. Note: some games in this round may still be upcoming (it may be a multi-day round) — only reference games that have actually been played
+3. Write exactly 5 punchy, entertaining "market headlines" that blend those real AFL results with sharemarket language
 
 CURRENT SPORTFOLIO PRICE MOVEMENTS:
 ${movementSummary}
@@ -740,11 +742,12 @@ ${deadlineContext ? `\nTRADE DEADLINE: ${deadlineContext}` : ""}
 
 HEADLINE STYLE GUIDE:
 - Write like Bloomberg meets the AFL Record — financial drama mixed with footy banter
-- Reference SPECIFIC teams, margins, and price moves (e.g. "Brisbane owners up $1.50 after dominant win")
-- Use market language: "surge", "freefall", "investors", "portfolio", "shares", "buy signal", "sell-off"
+- Reference SPECIFIC teams, margins, and price moves where results are known (e.g. "Brisbane shareholders up $1.50 after dominant 45-point win")
+- Use market language: "surge", "freefall", "investors", "portfolio", "shares", "buy signal", "sell-off", "shareholders"
 - Keep each headline 10-18 words — punchy and tight
 - Vary tone: some triumphant, some alarming, some sardonic
 - If a trade deadline exists, make ONE headline about it (e.g. "Make your move — trading closes Thursday at 7pm")
+- If some games haven't been played yet, one headline can tease the upcoming matches
 - NO quotation marks around headlines
 
 Respond ONLY with a valid JSON array of exactly 5 strings, no markdown, no explanation:
