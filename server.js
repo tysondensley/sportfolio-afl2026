@@ -709,27 +709,45 @@ async function generateAIHeadlines(gs) {
   const movementSummary = ladder.map((t, i) => {
     const pos = i + 1;
     const price = PRICE_SCALE[pos];
-    if (!compareLadder) return `${t.name}: $${price.toFixed(2)} (pos ${pos})`;
+    if (!compareLadder) return `${t.name}: $${price.toFixed(2)} (pos ${pos}, no prior data)`;
     const prevPos = compareLadder.findIndex(p => p.name === t.name);
     const prevPrice = PRICE_SCALE[prevPos + 1] || PRICE_SCALE[18];
     const chg = price - prevPrice;
-    const chgStr = chg > 0.005 ? `▲$${chg.toFixed(2)}` : chg < -0.005 ? `▼$${Math.abs(chg).toFixed(2)}` : `=`;
-    return `${t.name}: pos ${pos}, $${price.toFixed(2)} (${chgStr})`;
+    const chgStr = chg > 0.005 ? `UP $${chg.toFixed(2)}` : chg < -0.005 ? `DOWN $${Math.abs(chg).toFixed(2)}` : `unchanged`;
+    return `${t.name}: now pos ${pos} ($${price.toFixed(2)}, ${chgStr} from pos ${prevPos + 1})`;
   }).join("\n");
 
-  const prompt = `You are a witty financial market commentator covering the AFL Sportfolio sharemarket game. Write exactly 5 punchy, fun "market headlines" about the current AFL ladder and share price movements. Use AFL vernacular mixed with stockmarket language. Be creative, irreverent, and entertaining — think Bloomberg meets AFL Record.
+  // Trade deadline context
+  const deadline = gs.tradeDeadline ? new Date(gs.tradeDeadline) : null;
+  const isLocked = deadline && Date.now() > deadline.getTime();
+  const deadlineContext = deadline && !isLocked
+    ? `Trading window closes: ${deadline.toLocaleDateString('en-AU', { weekday:'long', day:'numeric', month:'long' })} at ${deadline.toLocaleTimeString('en-AU', { hour:'numeric', minute:'2-digit', hour12:true })}`
+    : null;
 
-CURRENT LADDER & PRICE MOVEMENTS:
+  // Work out which AFL round to search for
+  const aflRound = gs.round;
+  const roundLabel = aflRound === 1 ? "Opening Round 2026" : `Round ${aflRound - 1} 2026`;
+
+  const prompt = `You are a witty financial market commentator covering a fantasy AFL sharemarket game called Sportfolio. Players buy and sell AFL team "shares" — prices rise when teams climb the ladder, fall when they drop.
+
+YOUR TASK:
+1. Use web_search to find the actual AFL ${roundLabel} match results and scores from this weekend
+2. Write exactly 5 punchy, entertaining "market headlines" that blend AFL match news with sharemarket language
+
+CURRENT SPORTFOLIO PRICE MOVEMENTS:
 ${movementSummary}
+${deadlineContext ? `\nTRADE DEADLINE: ${deadlineContext}` : ""}
 
-Rules:
-- Each headline should be 8-15 words max — tight and punchy
-- Mix serious financial tone with AFL humour
-- Reference specific teams and price moves where relevant
-- Vary the style: some alarming, some triumphant, some sardonic
-- NO quotation marks around the headlines
+HEADLINE STYLE GUIDE:
+- Write like Bloomberg meets the AFL Record — financial drama mixed with footy banter
+- Reference SPECIFIC teams, margins, and price moves (e.g. "Brisbane owners up $1.50 after dominant win")
+- Use market language: "surge", "freefall", "investors", "portfolio", "shares", "buy signal", "sell-off"
+- Keep each headline 10-18 words — punchy and tight
+- Vary tone: some triumphant, some alarming, some sardonic
+- If a trade deadline exists, make ONE headline about it (e.g. "Make your move — trading closes Thursday at 7pm")
+- NO quotation marks around headlines
 
-Respond ONLY with a JSON array of exactly 5 strings, no markdown:
+Respond ONLY with a valid JSON array of exactly 5 strings, no markdown, no explanation:
 ["Headline 1","Headline 2","Headline 3","Headline 4","Headline 5"]`;
 
   try {
@@ -742,11 +760,13 @@ Respond ONLY with a JSON array of exactly 5 strings, no markdown:
       },
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
-        max_tokens: 400,
+        max_tokens: 600,
+        tools: [{ type: "web_search_20250305", name: "web_search" }],
         messages: [{ role: "user", content: prompt }]
       })
     });
     const data = await response.json();
+    console.log("Headline API blocks:", data.content && data.content.map(b => b.type).join(","));
     const textBlock = data.content && data.content.find(b => b.type === "text");
     if (textBlock) {
       const clean = textBlock.text.replace(/```json|```/g, "").trim();
@@ -767,7 +787,7 @@ Respond ONLY with a JSON array of exactly 5 strings, no markdown:
       "Ladder volatility at season high as mid-table logjam tightens",
       "Top-4 interest payments flowing — are your shares in the right hands?",
       "Brokerage costs biting traders who overextended this round",
-      "Hold period clock ticking — plan your exits carefully"
+      deadlineContext ? `Make your move — ${deadlineContext.toLowerCase()}` : "Hold period clock ticking — plan your exits carefully"
     ],
     generatedAt: new Date().toISOString()
   };
