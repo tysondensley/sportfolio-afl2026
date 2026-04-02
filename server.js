@@ -175,6 +175,13 @@ async function startSquigglePolling() {
       console.log(`Squiggle update: ladder changed for round ${aflRound}`);
       gs.ladder = newLadder;
       gs.liveUpdatedAt = new Date().toISOString();
+
+      // Daily headline refresh
+      if (await maybeRefreshHeadlines(gs)) {
+        console.log("Refreshing AI headlines (daily cycle)...");
+        gs.headlines = await generateAIHeadlines(gs);
+      }
+
       await saveState(gs);
     } catch(e) {
       console.error("Squiggle poller error:", e.message);
@@ -692,6 +699,88 @@ Respond ONLY with a valid JSON object in this exact format (no markdown, no expl
   return researchLog;
 }
 
+// ── AI HEADLINE GENERATION ────────────────────────────────────
+
+async function generateAIHeadlines(gs) {
+  const ladder = gs.ladder;
+  const compareLadder = gs.snapshotLadder || gs.prevLadder;
+
+  // Build price movement summary
+  const movementSummary = ladder.map((t, i) => {
+    const pos = i + 1;
+    const price = PRICE_SCALE[pos];
+    if (!compareLadder) return `${t.name}: $${price.toFixed(2)} (pos ${pos})`;
+    const prevPos = compareLadder.findIndex(p => p.name === t.name);
+    const prevPrice = PRICE_SCALE[prevPos + 1] || PRICE_SCALE[18];
+    const chg = price - prevPrice;
+    const chgStr = chg > 0.005 ? `▲$${chg.toFixed(2)}` : chg < -0.005 ? `▼$${Math.abs(chg).toFixed(2)}` : `=`;
+    return `${t.name}: pos ${pos}, $${price.toFixed(2)} (${chgStr})`;
+  }).join("\n");
+
+  const prompt = `You are a witty financial market commentator covering the AFL Sportfolio sharemarket game. Write exactly 5 punchy, fun "market headlines" about the current AFL ladder and share price movements. Use AFL vernacular mixed with stockmarket language. Be creative, irreverent, and entertaining — think Bloomberg meets AFL Record.
+
+CURRENT LADDER & PRICE MOVEMENTS:
+${movementSummary}
+
+Rules:
+- Each headline should be 8-15 words max — tight and punchy
+- Mix serious financial tone with AFL humour
+- Reference specific teams and price moves where relevant
+- Vary the style: some alarming, some triumphant, some sardonic
+- NO quotation marks around the headlines
+
+Respond ONLY with a JSON array of exactly 5 strings, no markdown:
+["Headline 1","Headline 2","Headline 3","Headline 4","Headline 5"]`;
+
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": process.env.ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01"
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 400,
+        messages: [{ role: "user", content: prompt }]
+      })
+    });
+    const data = await response.json();
+    const textBlock = data.content && data.content.find(b => b.type === "text");
+    if (textBlock) {
+      const clean = textBlock.text.replace(/```json|```/g, "").trim();
+      const items = JSON.parse(clean);
+      if (Array.isArray(items) && items.length) {
+        console.log("AI headlines generated:", items.length);
+        return { items, generatedAt: new Date().toISOString() };
+      }
+    }
+  } catch(e) {
+    console.error("Headline generation failed:", e.message);
+  }
+
+  // Fallback headlines
+  return {
+    items: [
+      "Markets open — position your portfolio before the siren",
+      "Ladder volatility at season high as mid-table logjam tightens",
+      "Top-4 interest payments flowing — are your shares in the right hands?",
+      "Brokerage costs biting traders who overextended this round",
+      "Hold period clock ticking — plan your exits carefully"
+    ],
+    generatedAt: new Date().toISOString()
+  };
+}
+
+// Check if headlines need daily refresh (called on each Squiggle poll cycle too)
+async function maybeRefreshHeadlines(gs) {
+  const headlines = gs.headlines;
+  if (!headlines || !headlines.generatedAt) return true; // needs generation
+  const age = Date.now() - new Date(headlines.generatedAt).getTime();
+  return age > 24 * 60 * 60 * 1000; // older than 24 hours
+}
+
 // ── API ROUTES ────────────────────────────────────────────────
 
 // Get full game state
@@ -1044,6 +1133,30 @@ app.post("/api/admin/fixtures", async (req, res) => {
   if (playerName !== "Tyson") return res.status(403).json({ error: "Admin only" });
   const gs = await loadState();
   gs.fixtures = fixtures;
+  await saveState(gs);
+  res.json({ success: true, state: gs });
+});
+
+// Admin: generate AI headlines
+app.post("/api/admin/generate-headlines", async (req, res) => {
+  const { playerName } = req.body;
+  if (playerName !== "Tyson") return res.status(403).json({ error: "Admin only" });
+  const gs = await loadState();
+  const headlines = await generateAIHeadlines(gs);
+  gs.headlines = headlines;
+  await saveState(gs);
+  res.json({ success: true, state: gs });
+});
+
+// Admin: manually save/edit headlines
+app.post("/api/admin/headlines", async (req, res) => {
+  const { playerName, items } = req.body;
+  if (playerName !== "Tyson") return res.status(403).json({ error: "Admin only" });
+  if (!Array.isArray(items)) return res.status(400).json({ error: "items must be an array" });
+  const gs = await loadState();
+  gs.headlines = gs.headlines || {};
+  gs.headlines.items = items.filter(h => h && h.trim());
+  gs.headlines.manualSavedAt = new Date().toISOString();
   await saveState(gs);
   res.json({ success: true, state: gs });
 });
