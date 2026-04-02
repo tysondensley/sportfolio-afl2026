@@ -772,11 +772,17 @@ Respond ONLY with a valid JSON array of exactly 5 strings, no markdown, no expla
     console.log("Headline API blocks:", data.content && data.content.map(b => b.type).join(","));
     const textBlock = data.content && data.content.find(b => b.type === "text");
     if (textBlock) {
-      const clean = textBlock.text.replace(/```json|```/g, "").trim();
-      const items = JSON.parse(clean);
-      if (Array.isArray(items) && items.length) {
-        console.log("AI headlines generated:", items.length);
-        return { items, generatedAt: new Date().toISOString() };
+      console.log("Headline raw text (first 300):", textBlock.text.slice(0,300));
+      // Extract JSON array robustly — find first [ to last ]
+      const raw = textBlock.text;
+      const start = raw.indexOf("[");
+      const end = raw.lastIndexOf("]");
+      if (start !== -1 && end !== -1 && end > start) {
+        const items = JSON.parse(raw.slice(start, end + 1));
+        if (Array.isArray(items) && items.length) {
+          console.log("AI headlines generated:", items);
+          return { items, generatedAt: new Date().toISOString() };
+        }
       }
     }
   } catch(e) {
