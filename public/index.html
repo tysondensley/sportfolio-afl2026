@@ -235,27 +235,21 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
 .port-layout{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
 
 /* ── TWO-TIER TICKER ── */
-.ticker-wrap{width:100%;overflow:hidden;background:rgba(8,11,18,.97);border-bottom:1px solid var(--border);margin-bottom:1rem;margin-left:calc(-1.25rem);width:calc(100% + 2.5rem)}
+.ticker-wrap{overflow:hidden;background:rgba(8,11,18,.97);border-bottom:1px solid var(--border);margin-bottom:1rem;margin-left:calc(-1.25rem);width:calc(100% + 2.5rem)}
 .ticker-row{display:flex;align-items:center;height:26px;overflow:hidden;position:relative}
 .ticker-row+.ticker-row{border-top:1px solid rgba(30,45,69,.5)}
 .ticker-label{flex-shrink:0;width:64px;font-size:.55rem;font-weight:700;text-transform:uppercase;letter-spacing:.1em;padding:0 .6rem;border-right:1px solid var(--border);height:100%;display:flex;align-items:center;z-index:2;background:rgba(8,11,18,.97)}
 .ticker-label.prices{color:var(--muted)}
 .ticker-label.news{color:var(--accent)}
 .ticker-track{display:flex;white-space:nowrap;will-change:transform}
-.ticker-track.prices{animation:tickerPrices 9s linear infinite}
-.ticker-track.news{animation:tickerNews 18s linear infinite}
 .ticker-item{display:inline-flex;align-items:center;gap:.35rem;padding:0 1.4rem;font-size:.7rem;height:26px}
 .ticker-item.price-item{color:#e8edf6;font-family:'DM Mono',monospace}
 .ticker-item.news-item{color:var(--accent);font-size:.68rem;font-style:italic}
 .ticker-sep{color:var(--dim);opacity:.5;font-size:.65rem}
-@keyframes tickerPrices{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
-@keyframes tickerNews{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
 @media(max-width:640px){
   .ticker-wrap{margin-left:calc(-.5rem);width:calc(100% + 1rem)}
   .ticker-label{width:52px;font-size:.5rem;padding:0 .4rem}
   .ticker-item{padding:0 .75rem;font-size:.65rem}
-  .ticker-track.prices{animation-duration:5s}
-  .ticker-track.news{animation-duration:10s}
 }
 .port-tradelog{}
 @media(max-width:640px){.market-wrap{max-width:none}}
@@ -958,17 +952,43 @@ function renderAll(){
   if(currentPlayer==="Tyson") renderAdmin();
 }
 
+// Ticker animation state
+const tickerState={prices:{x:0,raf:null},news:{x:0,raf:null}};
+const TICKER_PX_PER_SEC={prices:120,news:60}; // pixels per second — higher = faster
+
+function startTickerAnim(id,key){
+  const el=document.getElementById(id);
+  if(!el) return;
+  if(tickerState[key].raf) cancelAnimationFrame(tickerState[key].raf);
+  // Wait for images to load before measuring
+  setTimeout(()=>{
+    const halfW=el.scrollWidth/2;
+    if(halfW<=0) return;
+    let x=tickerState[key].x||0;
+    let last=null;
+    function step(ts){
+      if(last===null) last=ts;
+      const dt=(ts-last)/1000;
+      last=ts;
+      x+=TICKER_PX_PER_SEC[key]*dt;
+      if(x>=halfW) x=0; // seamless reset exactly at halfway point
+      el.style.transform=`translateX(${-x}px)`;
+      tickerState[key].raf=requestAnimationFrame(step);
+    }
+    tickerState[key].x=x;
+    tickerState[key].raf=requestAnimationFrame(step);
+  },150);
+}
+
 function renderTicker(){
   const gs=gameState;
   const deadline=gs.tradeDeadline?new Date(gs.tradeDeadline).getTime():null;
   const isLocked=deadline&&Date.now()>deadline;
 
   // ── PRICES ROW ──
-  // Compare vs snapshotLadder (round start) during lockout, vs prevLadder during trading
   const compareLadder=isLocked&&gs.snapshotLadder?gs.snapshotLadder:gs.prevLadder;
   const pEl=document.getElementById("tickerPrices");
   if(pEl&&compareLadder){
-    // Only show movers (price has changed)
     const movers=gs.ladder.map((t,i)=>{
       const pos=i+1;
       const price=PRICE_SCALE[pos];
@@ -990,15 +1010,15 @@ function renderTicker(){
           `<span style="color:${col};font-size:.63rem">${sym}$${Math.abs(m.chg).toFixed(2)}</span>`+
           `</span><span class="ticker-item ticker-sep">·</span>`;
       }).join("");
-      // Duplicate for seamless loop
-      pEl.innerHTML=items+items;
+      pEl.innerHTML=items+items; // duplicate for seamless loop
     } else {
-      // No movers yet — show all prices briefly
       pEl.innerHTML=`<span class="ticker-item price-item" style="color:var(--muted)">No price changes yet this round</span>`;
     }
   } else if(pEl){
     pEl.innerHTML=`<span class="ticker-item price-item" style="color:var(--muted)">Prices update after Round 1</span>`;
   }
+  tickerState.prices.x=0;
+  startTickerAnim("tickerPrices","prices");
 
   // ── NEWS ROW ──
   const nEl=document.getElementById("tickerNews");
@@ -1011,6 +1031,8 @@ function renderTicker(){
     ).join("");
     nEl.innerHTML=items+items;
   }
+  tickerState.news.x=0;
+  startTickerAnim("tickerNews","news");
 }
 
 function getRoundLabel(r){if(r===0)return"PRE";if(r===1)return"R1";if(r>=10)return"R9";return"R"+r;}
@@ -1938,6 +1960,11 @@ function renderHeadlineEditors(){
   const el=document.getElementById("headlineEditors");
   const statusEl=document.getElementById("headlineStatus");
   if(!el) return;
+
+  // Don't rebuild if a headline textarea is currently focused — would wipe what the user is typing
+  const focused=document.activeElement;
+  if(focused&&focused.id&&focused.id.startsWith("hl_")) return;
+
   const headlines=gs.headlines;
   const items=headlines&&headlines.items&&headlines.items.length
     ?headlines.items
