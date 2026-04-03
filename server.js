@@ -1042,7 +1042,8 @@ app.post("/api/admin/advance", async (req, res) => {
     totals: ALL_PLAYERS.reduce((acc, n) => {
       acc[n] = gs.snapshot[n].total;
       return acc;
-    }, {})
+    }, {}),
+    ladder: JSON.parse(JSON.stringify(gs.ladder)) // store ladder for Research page charts
   });
 
   // Save ladder snapshot at round start — used for "change since round started" column
@@ -1162,6 +1163,24 @@ app.post("/api/admin/fixtures", async (req, res) => {
   if (playerName !== "Tyson") return res.status(403).json({ error: "Admin only" });
   const gs = await loadState();
   gs.fixtures = fixtures;
+  await saveState(gs);
+  res.json({ success: true, state: gs });
+});
+
+// Admin: backfill historical ladder data for Research page
+// Accepts { round, ladder: [{name, pos}] } to patch a history entry
+app.post("/api/admin/backfill-history", async (req, res) => {
+  const { playerName, round, ladder } = req.body;
+  if (playerName !== "Tyson") return res.status(403).json({ error: "Admin only" });
+  const gs = await loadState();
+  gs.history = gs.history || [];
+  const entry = gs.history.find(h => h.round === round);
+  if (!entry) return res.status(404).json({ error: `No history entry for round ${round}` });
+  // Build a full ladder array from the position data
+  entry.ladder = ladder.map(item => {
+    const team = AFL_TEAMS.find(t => t.name === item.name) || { emoji: '🏉' };
+    return { name: item.name, emoji: team.emoji, pos: item.pos };
+  });
   await saveState(gs);
   res.json({ success: true, state: gs });
 });
