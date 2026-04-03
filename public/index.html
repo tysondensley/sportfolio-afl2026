@@ -298,6 +298,7 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
       <button class="active" onclick="showTab('market',this)">📈 Market</button>
       <button onclick="showTab('portfolio',this)">💼 Portfolio</button>
       <button onclick="showTab('leaderboard',this)">🏆 Rankings</button>
+      <button onclick="showTab('research',this)">🔭 Research</button>
       <button onclick="showTab('rules',this)">📋 Rules</button>
       <button id="adminNavBtn" onclick="showTab('admin',this)" style="display:none">⚙ Admin</button>
     </nav>
@@ -489,6 +490,66 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
             <button class="btn sm" style="margin-top:.75rem;width:100%" onclick="refreshState()">🔄 Refresh</button>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- RESEARCH -->
+    <div class="page" id="tab-research">
+      <div style="max-width:960px;margin:0 auto">
+
+        <!-- Market Movement — team ladder positions round by round -->
+        <div class="card" style="margin-bottom:1.1rem">
+          <div class="card-hd">
+            <div class="card-title">Market Movement</div>
+            <div style="font-size:.68rem;color:var(--muted)">Ladder position by round — lower = better</div>
+          </div>
+          <div class="card-body" style="padding:.75rem">
+            <!-- Team filter pills -->
+            <div id="marketMovementFilter" style="display:flex;flex-wrap:wrap;gap:.35rem;margin-bottom:.875rem"></div>
+            <div style="position:relative">
+              <canvas id="marketMovementChart" style="width:100%;display:block"></canvas>
+              <div id="marketMovementTooltip" style="font-size:.72rem;color:var(--muted);margin-top:.4rem;min-height:1.2em;text-align:center"></div>
+            </div>
+            <div id="marketMovementLegend" style="display:flex;flex-wrap:wrap;gap:.6rem 1.1rem;margin-top:.6rem;font-size:.68rem"></div>
+          </div>
+        </div>
+
+        <!-- Portfolio Growth — player values round by round -->
+        <div class="card" style="margin-bottom:1.1rem">
+          <div class="card-hd">
+            <div class="card-title">Portfolio Growth</div>
+            <div style="font-size:.68rem;color:var(--muted)">Portfolio value by round</div>
+          </div>
+          <div class="card-body" style="padding:.75rem">
+            <!-- View toggle -->
+            <div style="display:flex;gap:.5rem;margin-bottom:.875rem">
+              <button id="pgLineBtn" class="btn sm" style="background:rgba(255,180,0,.1);border-color:rgba(255,180,0,.35);color:var(--accent)" onclick="setPGView('line')">Line</button>
+              <button id="pgBarBtn" class="btn sm" onclick="setPGView('bar')">Grouped Bars</button>
+            </div>
+            <div style="position:relative">
+              <canvas id="portfolioGrowthChart" style="width:100%;display:block"></canvas>
+              <div id="portfolioGrowthTooltip" style="font-size:.72rem;color:var(--muted);margin-top:.4rem;min-height:1.2em;text-align:center"></div>
+            </div>
+            <div id="portfolioGrowthLegend" style="display:flex;flex-wrap:wrap;gap:.6rem 1.1rem;margin-top:.6rem;font-size:.68rem"></div>
+          </div>
+        </div>
+
+        <!-- Price Predictions — projected ladder positions -->
+        <div class="card" style="margin-bottom:1.1rem">
+          <div class="card-hd">
+            <div class="card-title">Price Predictions</div>
+            <div style="font-size:.68rem;color:var(--muted)">Projected ladder positions based on current trajectory — dashed lines are forecast</div>
+          </div>
+          <div class="card-body" style="padding:.75rem">
+            <div id="pricePredFilter" style="display:flex;flex-wrap:wrap;gap:.35rem;margin-bottom:.875rem"></div>
+            <div style="position:relative">
+              <canvas id="pricePredChart" style="width:100%;display:block"></canvas>
+              <div id="pricePredTooltip" style="font-size:.72rem;color:var(--muted);margin-top:.4rem;min-height:1.2em;text-align:center"></div>
+            </div>
+            <div id="pricePredLegend" style="display:flex;flex-wrap:wrap;gap:.6rem 1.1rem;margin-top:.6rem;font-size:.68rem"></div>
+          </div>
+        </div>
+
       </div>
     </div>
 
@@ -948,6 +1009,7 @@ function renderAll(){
   renderLadder();
   renderPortfolio();
   renderRankings();
+  renderResearch();
   if(currentPlayer==="Tyson") renderAdmin();
 }
 
@@ -1032,6 +1094,463 @@ function renderTicker(){
   }
   tickerState.news.x=0;
   startTickerAnim("tickerNews","news");
+}
+
+// ── RESEARCH PAGE ─────────────────────────────────────────────
+
+let pgView='line'; // 'line' or 'bar'
+let mmFilter=new Set(); // empty = show all teams
+let ppFilter=new Set();
+
+// Colours for teams — cycle through a palette
+const TEAM_PALETTE=[
+  "#FFB400","#4da6ff","#00c97a","#ff4f6d","#a78bfa","#fb923c","#34d399","#f472b6",
+  "#60a5fa","#fbbf24","#a3e635","#e879f9","#2dd4bf","#f87171","#818cf8","#c084fc",
+  "#38bdf8","#fb7185"
+];
+
+function getTeamColor(idx){ return TEAM_PALETTE[idx%TEAM_PALETTE.length]; }
+
+// Build full ladder history from gs.history entries
+// Each history entry should have { round, totals, ladder }
+// We also inject the pre-season ladder as round 0
+function buildLadderHistory(gs){
+  const history = gs.history || [];
+  const points = [];
+
+  // Pre-season — use gs.ladder order as rough baseline if no history
+  // Round 0: we don't store this explicitly, skip unless backfilled
+  history.forEach(h => {
+    if(h.ladder) points.push({ round: h.round, ladder: h.ladder });
+  });
+
+  // Also add current live ladder as the latest point if round is locked
+  const deadline = gs.tradeDeadline ? new Date(gs.tradeDeadline).getTime() : null;
+  const isLocked = deadline && Date.now() > deadline;
+  if(isLocked && gs.round > 0){
+    points.push({ round: gs.round, ladder: gs.ladder, live: true });
+  }
+
+  return points;
+}
+
+function buildPortfolioHistory(gs){
+  const history = gs.history || [];
+  const points = [{ round: 0, totals: ALL_PLAYERS.reduce((a,n)=>{ a[n]=10000; return a; }, {}) }];
+  history.forEach(h => points.push({ round: h.round, totals: h.totals }));
+
+  // Add live current values if locked
+  const deadline = gs.tradeDeadline ? new Date(gs.tradeDeadline).getTime() : null;
+  const isLocked = deadline && Date.now() > deadline;
+  if(isLocked && gs.round > 0){
+    const live = ALL_PLAYERS.reduce((a,n)=>{ a[n]=getTotal(gs.players[n]); return a; }, {});
+    points.push({ round: gs.round, totals: live, live: true });
+  }
+
+  return points;
+}
+
+function setPGView(v){
+  pgView=v;
+  document.getElementById("pgLineBtn").style.background=v==='line'?'rgba(255,180,0,.1)':'';
+  document.getElementById("pgLineBtn").style.borderColor=v==='line'?'rgba(255,180,0,.35)':'';
+  document.getElementById("pgLineBtn").style.color=v==='line'?'var(--accent)':'';
+  document.getElementById("pgBarBtn").style.background=v==='bar'?'rgba(255,180,0,.1)':'';
+  document.getElementById("pgBarBtn").style.borderColor=v==='bar'?'rgba(255,180,0,.35)':'';
+  document.getElementById("pgBarBtn").style.color=v==='bar'?'var(--accent)':'';
+  renderResearch();
+}
+
+function drawResearchCanvas(canvasId, drawFn){
+  const canvas = document.getElementById(canvasId);
+  if(!canvas) return null;
+  const dpr = window.devicePixelRatio || 1;
+  const W = canvas.parentElement.clientWidth || 600;
+  const H = 220;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, W, H);
+  return { ctx, W, H };
+}
+
+function renderResearch(){
+  const gs = gameState;
+  if(!gs) return;
+
+  drawMarketMovement(gs);
+  drawPortfolioGrowth(gs);
+  drawPricePredictions(gs);
+}
+
+// ── MARKET MOVEMENT ──
+function drawMarketMovement(gs){
+  const ladderHistory = buildLadderHistory(gs);
+  const filterEl = document.getElementById('marketMovementFilter');
+  const legendEl = document.getElementById('marketMovementLegend');
+  const tooltipEl = document.getElementById('marketMovementTooltip');
+
+  if(ladderHistory.length < 1){
+    const c = document.getElementById('marketMovementChart');
+    if(c){ c.style.height='60px'; const r = drawResearchCanvas('marketMovementChart',null); if(r){ r.ctx.fillStyle='#637089'; r.ctx.font="13px 'DM Sans',sans-serif"; r.ctx.textAlign='center'; r.ctx.fillText('Data available after Round 1 advances',r.W/2,36); } }
+    if(filterEl) filterEl.innerHTML='';
+    if(legendEl) legendEl.innerHTML='';
+    return;
+  }
+
+  const teams = AFL_TEAMS.map(t => t.name);
+
+  // Build filter pills
+  if(filterEl && filterEl.children.length === 0){
+    filterEl.innerHTML = `<span style="font-size:.65rem;color:var(--muted);align-self:center;margin-right:.2rem">Filter:</span>` +
+      teams.map((t,i) => `<button onclick="toggleMMFilter('${t}')" id="mmf_${t.replace(/ /g,'_')}" style="font-size:.6rem;padding:.18rem .5rem;border-radius:4px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);cursor:pointer;font-family:inherit">${t}</button>`).join('');
+  }
+
+  const r = drawResearchCanvas('marketMovementChart', null);
+  if(!r) return;
+  const { ctx, W, H } = r;
+
+  const pad = { t:12, r:16, b:28, l:32 };
+  const cW = W - pad.l - pad.r;
+  const cH = H - pad.t - pad.b;
+
+  const rounds = ladderHistory.map(p => p.round);
+  const minR = rounds[0], maxR = rounds[rounds.length-1];
+  const xScale = r => maxR===minR ? pad.l+cW/2 : pad.l + (r-minR)/(maxR-minR)*cW;
+  const yScale = pos => pad.t + (pos-1)/17 * cH; // pos 1 at top, 18 at bottom
+
+  // Grid lines
+  ctx.strokeStyle = 'rgba(30,45,69,.5)'; ctx.lineWidth = 0.5;
+  [1,4,8,12,16,18].forEach(pos => {
+    const y = yScale(pos);
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l+cW, y); ctx.stroke();
+    ctx.fillStyle='#637089'; ctx.font="9px 'DM Mono',monospace"; ctx.textAlign='right';
+    ctx.fillText(pos, pad.l-4, y+3);
+  });
+
+  // X axis labels
+  ctx.textAlign='center'; ctx.fillStyle='#637089'; ctx.font="9px 'DM Mono',monospace";
+  ladderHistory.forEach(p => {
+    ctx.fillText(p.round===0?'Pre':'R'+p.round, xScale(p.round), H-pad.b+12);
+  });
+
+  // Draw lines — filtered teams only (or all if no filter)
+  const activeFilt = mmFilter.size > 0 ? mmFilter : new Set(teams);
+  let legendHtml = '';
+  teams.forEach((teamName, ti) => {
+    const color = getTeamColor(ti);
+    const active = activeFilt.has(teamName);
+    if(!active) return;
+
+    const posHistory = ladderHistory.map(p => {
+      if(!p.ladder) return null;
+      const idx = p.ladder.findIndex(t => t.name === teamName);
+      return idx === -1 ? null : idx + 1;
+    });
+
+    ctx.beginPath();
+    let started = false;
+    ladderHistory.forEach((p, i) => {
+      const pos = posHistory[i];
+      if(pos === null) return;
+      const x = xScale(p.round);
+      const y = yScale(pos);
+      if(!started){ ctx.moveTo(x,y); started=true; } else { ctx.lineTo(x,y); }
+    });
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.globalAlpha = 0.85;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+
+    // Dot on latest
+    const last = ladderHistory[ladderHistory.length-1];
+    const lastPos = posHistory[ladderHistory.length-1];
+    if(lastPos !== null){
+      ctx.beginPath();
+      ctx.arc(xScale(last.round), yScale(lastPos), 3, 0, Math.PI*2);
+      ctx.fillStyle = color; ctx.fill();
+    }
+
+    legendHtml += `<span style="display:inline-flex;align-items:center;gap:.3rem"><span style="width:14px;height:2px;background:${color};display:inline-block;border-radius:2px"></span><span style="color:var(--muted)">${teamName}</span></span>`;
+  });
+
+  if(legendEl) legendEl.innerHTML = legendHtml;
+
+  // Tooltip on click
+  const canvas = document.getElementById('marketMovementChart');
+  canvas.onclick = e => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (canvas.width / rect.width) / (window.devicePixelRatio||1);
+    let nearest = ladderHistory[0]; let minDist = Infinity;
+    ladderHistory.forEach(p => { const d=Math.abs(xScale(p.round)-mx); if(d<minDist){minDist=d;nearest=p;} });
+    if(minDist > 40 || !nearest.ladder) return;
+    const label = nearest.round===0?'Pre-Season':'Round '+nearest.round;
+    const top3 = [...nearest.ladder].slice(0,3).map((t,i)=>`${i+1}. ${t.name}`).join(' · ');
+    if(tooltipEl) tooltipEl.textContent = `${label} — Top 3: ${top3}`;
+  };
+}
+
+function toggleMMFilter(team){
+  if(mmFilter.has(team)) mmFilter.delete(team); else mmFilter.add(team);
+  const btn = document.getElementById('mmf_'+team.replace(/ /g,'_'));
+  if(btn){
+    const active = mmFilter.has(team);
+    btn.style.background = active?'rgba(255,180,0,.1)':'var(--surface2)';
+    btn.style.borderColor = active?'rgba(255,180,0,.35)':'var(--border)';
+    btn.style.color = active?'var(--accent)':'var(--muted)';
+  }
+  drawMarketMovement(gameState);
+}
+
+// ── PORTFOLIO GROWTH ──
+function drawPortfolioGrowth(gs){
+  const points = buildPortfolioHistory(gs);
+  const tooltipEl = document.getElementById('portfolioGrowthTooltip');
+  const legendEl = document.getElementById('portfolioGrowthLegend');
+
+  if(points.length < 2){
+    const r = drawResearchCanvas('portfolioGrowthChart',null);
+    if(r){ r.ctx.fillStyle='#637089'; r.ctx.font="13px 'DM Sans',sans-serif"; r.ctx.textAlign='center'; r.ctx.fillText('Data available after Round 1 advances',r.W/2,36); }
+    return;
+  }
+
+  const r = drawResearchCanvas('portfolioGrowthChart', null);
+  if(!r) return;
+  const { ctx, W, H } = r;
+
+  const players = HUMAN_PLAYERS; // Research page shows humans only
+  const PCOLORS = { [HUMAN_PLAYERS[0]]:'#FFB400', [HUMAN_PLAYERS[1]]:'#4da6ff', [HUMAN_PLAYERS[2]]:'#00c97a' };
+
+  const pad = { t:12, r:16, b:28, l:58 };
+  const cW = W - pad.l - pad.r;
+  const cH = H - pad.t - pad.b;
+
+  if(pgView === 'line'){
+    const allVals = points.flatMap(p => players.map(n => p.totals[n]||0));
+    const minV = Math.min(...allVals)*0.97, maxV = Math.max(...allVals)*1.03;
+    const rounds = points.map(p => p.round);
+    const minR = rounds[0], maxR = rounds[rounds.length-1];
+    const xScale = r => maxR===minR?pad.l+cW/2:pad.l+(r-minR)/(maxR-minR)*cW;
+    const yScale = v => pad.t+cH-(v-minV)/(maxV-minV)*cH;
+
+    // Grid
+    ctx.strokeStyle='rgba(30,45,69,.5)'; ctx.lineWidth=0.5;
+    [0.25,0.5,0.75,1].forEach(f => {
+      const y=pad.t+cH*f;
+      ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(pad.l+cW,y); ctx.stroke();
+      const val=maxV-(maxV-minV)*f;
+      ctx.fillStyle='#637089'; ctx.font="9px 'DM Mono',monospace"; ctx.textAlign='right';
+      ctx.fillText('$'+Math.round(val/1000)+'k', pad.l-4, y+3);
+    });
+
+    // X labels
+    ctx.textAlign='center'; ctx.fillStyle='#637089'; ctx.font="9px 'DM Mono',monospace";
+    points.forEach(p => ctx.fillText(p.round===0?'Pre':'R'+p.round, xScale(p.round), H-pad.b+12));
+
+    // Lines
+    let legendHtml='';
+    players.forEach(name => {
+      const color = PCOLORS[name]||'#637089';
+      ctx.beginPath();
+      points.forEach((p,i) => {
+        const x=xScale(p.round); const y=yScale(p.totals[name]||10000);
+        i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+      });
+      ctx.strokeStyle=color; ctx.lineWidth=2.5; ctx.stroke();
+      const last=points[points.length-1];
+      ctx.beginPath(); ctx.arc(xScale(last.round),yScale(last.totals[name]||10000),4,0,Math.PI*2);
+      ctx.fillStyle=color; ctx.fill();
+      legendHtml+=`<span style="display:inline-flex;align-items:center;gap:.3rem"><span style="width:18px;height:2.5px;background:${color};display:inline-block;border-radius:2px"></span><span style="color:var(--muted)">${name}</span></span>`;
+    });
+    if(legendEl) legendEl.innerHTML=legendHtml;
+
+    // Click tooltip
+    const canvas=document.getElementById('portfolioGrowthChart');
+    canvas.onclick=e=>{
+      const rect=canvas.getBoundingClientRect();
+      const mx=(e.clientX-rect.left)*(canvas.width/rect.width)/(window.devicePixelRatio||1);
+      let nearest=points[0]; let minDist=Infinity;
+      points.forEach(p=>{const d=Math.abs(xScale(p.round)-mx);if(d<minDist){minDist=d;nearest=p;}});
+      if(minDist>40) return;
+      const label=nearest.round===0?'Pre-Season':'Round '+nearest.round;
+      const vals=players.map(n=>`${n}: $${Math.round(nearest.totals[n]||0).toLocaleString()}`).join(' · ');
+      if(tooltipEl) tooltipEl.textContent=`${label} — ${vals}`;
+    };
+
+  } else {
+    // Grouped bar chart
+    const rounds = points.slice(1); // skip pre-season for bars — not interesting
+    if(!rounds.length){ return; }
+    const allVals = rounds.flatMap(p=>players.map(n=>p.totals[n]||0));
+    const maxV = Math.max(...allVals)*1.05;
+    const barGroupW = cW/rounds.length;
+    const barW = Math.min(barGroupW*0.22, 18);
+    const gap = (barGroupW - barW*players.length) / 2;
+
+    // Grid
+    ctx.strokeStyle='rgba(30,45,69,.5)'; ctx.lineWidth=0.5;
+    [0.25,0.5,0.75,1].forEach(f=>{
+      const y=pad.t+cH*f;
+      ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(pad.l+cW,y); ctx.stroke();
+      const val=maxV*(1-f);
+      ctx.fillStyle='#637089'; ctx.font="9px 'DM Mono',monospace"; ctx.textAlign='right';
+      ctx.fillText('$'+Math.round(val/1000)+'k',pad.l-4,y+3);
+    });
+
+    let legendHtml='';
+    rounds.forEach((p,ri)=>{
+      const groupX = pad.l + ri*barGroupW + gap;
+      players.forEach((name,pi)=>{
+        const color=PCOLORS[name]||'#637089';
+        const val=p.totals[name]||0;
+        const barH=(val/maxV)*cH;
+        const x=groupX+pi*barW;
+        const y=pad.t+cH-barH;
+        ctx.fillStyle=color;
+        ctx.globalAlpha=0.85;
+        ctx.fillRect(x,y,barW-1,barH);
+        ctx.globalAlpha=1;
+      });
+      // X label
+      ctx.fillStyle='#637089'; ctx.font="9px 'DM Mono',monospace"; ctx.textAlign='center';
+      ctx.fillText('R'+p.round, pad.l+ri*barGroupW+barGroupW/2, H-pad.b+12);
+    });
+
+    players.forEach(name=>{
+      const color=PCOLORS[name]||'#637089';
+      legendHtml+=`<span style="display:inline-flex;align-items:center;gap:.3rem"><span style="width:12px;height:12px;background:${color};display:inline-block;border-radius:2px;opacity:.85"></span><span style="color:var(--muted)">${name}</span></span>`;
+    });
+    if(legendEl) legendEl.innerHTML=legendHtml;
+  }
+}
+
+// ── PRICE PREDICTIONS ──
+function drawPricePredictions(gs){
+  const ladderHistory = buildLadderHistory(gs);
+  const filterEl = document.getElementById('pricePredFilter');
+  const legendEl = document.getElementById('pricePredLegend');
+  const tooltipEl = document.getElementById('pricePredTooltip');
+  const TOTAL_ROUNDS = 10;
+
+  if(ladderHistory.length < 2){
+    const r = drawResearchCanvas('pricePredChart',null);
+    if(r){ r.ctx.fillStyle='#637089'; r.ctx.font="13px 'DM Sans',sans-serif"; r.ctx.textAlign='center'; r.ctx.fillText('Predictions available after 2+ rounds of data',r.W/2,36); }
+    if(filterEl) filterEl.innerHTML='';
+    return;
+  }
+
+  const teams = AFL_TEAMS.map(t=>t.name);
+
+  // Build filter pills
+  if(filterEl && filterEl.children.length===0){
+    filterEl.innerHTML=`<span style="font-size:.65rem;color:var(--muted);align-self:center;margin-right:.2rem">Filter:</span>`+
+      teams.map((t,i)=>`<button onclick="togglePPFilter('${t}')" id="ppf_${t.replace(/ /g,'_')}" style="font-size:.6rem;padding:.18rem .5rem;border-radius:4px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);cursor:pointer;font-family:inherit">${t}</button>`).join('');
+  }
+
+  const r = drawResearchCanvas('pricePredChart', null);
+  if(!r) return;
+  const { ctx, W, H } = r;
+
+  const pad={t:12,r:16,b:28,l:32};
+  const cW=W-pad.l-pad.r;
+  const cH=H-pad.t-pad.b;
+
+  // Extend x-axis to TOTAL_ROUNDS
+  const lastRound = ladderHistory[ladderHistory.length-1].round;
+  const futureRounds = [];
+  for(let rr=lastRound+1; rr<=TOTAL_ROUNDS; rr++) futureRounds.push(rr);
+
+  const minR=0, maxR=TOTAL_ROUNDS;
+  const xScale=r=>pad.l+(r-minR)/(maxR-minR)*cW;
+  const yScale=pos=>pad.t+(pos-1)/17*cH;
+
+  // Grid
+  ctx.strokeStyle='rgba(30,45,69,.5)'; ctx.lineWidth=0.5;
+  [1,4,8,12,16,18].forEach(pos=>{
+    const y=yScale(pos);
+    ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(pad.l+cW,y); ctx.stroke();
+    ctx.fillStyle='#637089'; ctx.font="9px 'DM Mono',monospace"; ctx.textAlign='right';
+    ctx.fillText(pos,pad.l-4,y+3);
+  });
+
+  // X labels — all rounds
+  ctx.textAlign='center'; ctx.fillStyle='#637089'; ctx.font="9px 'DM Mono',monospace";
+  for(let rr=0;rr<=TOTAL_ROUNDS;rr++) ctx.fillText(rr===0?'Pre':'R'+rr,xScale(rr),H-pad.b+12);
+
+  // Vertical divider between actual and predicted
+  ctx.strokeStyle='rgba(255,180,0,.2)'; ctx.lineWidth=1; ctx.setLineDash([3,3]);
+  ctx.beginPath(); ctx.moveTo(xScale(lastRound),pad.t); ctx.lineTo(xScale(lastRound),pad.t+cH); ctx.stroke();
+  ctx.setLineDash([]);
+
+  const activeFilt = ppFilter.size>0?ppFilter:new Set(teams);
+  let legendHtml='';
+
+  teams.forEach((teamName,ti)=>{
+    if(!activeFilt.has(teamName)) return;
+    const color=getTeamColor(ti);
+
+    // Get historical positions
+    const histPositions = ladderHistory.map(p=>{
+      if(!p.ladder) return null;
+      const idx=p.ladder.findIndex(t=>t.name===teamName);
+      return idx===-1?null:{round:p.round,pos:idx+1};
+    }).filter(Boolean);
+
+    if(histPositions.length===0) return;
+
+    // Draw actual line (solid)
+    ctx.beginPath();
+    histPositions.forEach((pt,i)=>{
+      const x=xScale(pt.round); const y=yScale(pt.pos);
+      i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    });
+    ctx.strokeStyle=color; ctx.lineWidth=1.5; ctx.globalAlpha=0.85; ctx.stroke(); ctx.globalAlpha=1;
+
+    // Predict future positions using linear regression on recent rounds
+    if(futureRounds.length>0 && histPositions.length>=2){
+      // Simple linear regression
+      const n=histPositions.length;
+      const sumX=histPositions.reduce((s,p)=>s+p.round,0);
+      const sumY=histPositions.reduce((s,p)=>s+p.pos,0);
+      const sumXY=histPositions.reduce((s,p)=>s+p.round*p.pos,0);
+      const sumX2=histPositions.reduce((s,p)=>s+p.round*p.round,0);
+      const slope=(n*sumXY-sumX*sumY)/(n*sumX2-sumX*sumX);
+      const intercept=(sumY-slope*sumX)/n;
+
+      const lastActual=histPositions[histPositions.length-1];
+
+      // Draw dashed projected line
+      ctx.beginPath();
+      ctx.moveTo(xScale(lastActual.round),yScale(lastActual.pos));
+      futureRounds.forEach(rr=>{
+        const projPos=Math.max(1,Math.min(18,Math.round(intercept+slope*rr)));
+        ctx.lineTo(xScale(rr),yScale(projPos));
+      });
+      ctx.strokeStyle=color; ctx.lineWidth=1.5; ctx.globalAlpha=0.45;
+      ctx.setLineDash([4,3]); ctx.stroke();
+      ctx.setLineDash([]); ctx.globalAlpha=1;
+    }
+
+    legendHtml+=`<span style="display:inline-flex;align-items:center;gap:.3rem"><span style="width:14px;height:2px;background:${color};display:inline-block;border-radius:2px"></span><span style="color:var(--muted)">${teamName}</span></span>`;
+  });
+
+  if(legendEl) legendEl.innerHTML=legendHtml;
+}
+
+function togglePPFilter(team){
+  if(ppFilter.has(team)) ppFilter.delete(team); else ppFilter.add(team);
+  const btn=document.getElementById('ppf_'+team.replace(/ /g,'_'));
+  if(btn){
+    const active=ppFilter.has(team);
+    btn.style.background=active?'rgba(255,180,0,.1)':'var(--surface2)';
+    btn.style.borderColor=active?'rgba(255,180,0,.35)':'var(--border)';
+    btn.style.color=active?'var(--accent)':'var(--muted)';
+  }
+  drawPricePredictions(gameState);
 }
 
 function getRoundLabel(r){if(r===0)return"PRE";if(r===1)return"R1";if(r>=10)return"R9";return"R"+r;}
@@ -2201,7 +2720,7 @@ function showTab(name,btn){
   document.querySelectorAll("nav button").forEach(b=>b.classList.remove("active"));
   document.getElementById("tab-"+name).classList.add("active");
   if(btn) btn.classList.add("active");
-  else document.querySelectorAll("nav button")[["market","portfolio","leaderboard","rules","admin"].indexOf(name)]?.classList.add("active");
+  else document.querySelectorAll("nav button")[["market","portfolio","leaderboard","research","rules","admin"].indexOf(name)]?.classList.add("active");
 }
 
 function showToast(type,title,msg){
