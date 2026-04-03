@@ -1715,7 +1715,7 @@ function renderRankings(){
   // Dynamic subheading based on state
   const overallSubLabel=document.getElementById("lbRoundLabel");
   if(isLocked){
-    overallSubLabel.innerHTML=`<span style="color:var(--up)">● Live — updates as games are played</span>`;
+    overallSubLabel.innerHTML=`<span style="color:var(--up)">● Live — updates as each game is completed</span>`;
   } else if(gs.round>0){
     overallSubLabel.innerHTML=`${roundLabel} &nbsp;·&nbsp; <span style="color:var(--muted)">🔒 Frozen during trading window</span>`;
   } else {
@@ -1778,7 +1778,7 @@ function renderRankings(){
 
     if(isLocked && gs.snapshot){
       // Active round — live gains vs round start
-      roundTabLabel=`<span style="color:var(--up)">● Live — updates as games are played</span>`;
+      roundTabLabel=`<span style="color:var(--up)">● Live — updates as each game is completed</span>`;
       roundRanked=ALL_PLAYERS.map(n=>{
         const cur=getTotal(gs.players[n]);
         const base=gs.snapshot[n]?gs.snapshot[n].total:10000;
