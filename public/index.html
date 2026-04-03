@@ -309,8 +309,7 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
         <div class="rv" id="roundDisplay">PRE</div>
       </div>
       <button class="btn sm" onclick="logout()">← Switch</button>
-      <button class="btn sm danger" id="backBtn" onclick="backRound()" style="display:none">← Back</button>
-      <button class="btn primary sm" id="advanceBtn" onclick="advanceRound()" style="display:none">Advance Round →</button>
+      <button id="adminNavBtn" onclick="showTab('admin',this)" style="display:none">⚙ Admin</button>
     </div>
   </header>
 
@@ -612,6 +611,11 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
 
     <!-- ADMIN -->
     <div class="page" id="tab-admin">
+      <!-- Round control strip — most important admin action, sits at top -->
+      <div style="display:flex;gap:.75rem;align-items:center;margin-bottom:1.1rem;flex-wrap:wrap">
+        <button class="btn primary" id="advanceBtn" onclick="advanceRound()" style="flex:1;padding:.75rem;font-size:.9rem;min-width:160px">Advance Round →</button>
+        <button class="btn danger" id="backBtn" onclick="backRound()" style="padding:.75rem;font-size:.9rem">← Back One Round</button>
+      </div>
       <div class="two-col">
         <div class="card">
           <div class="card-hd">
@@ -958,8 +962,6 @@ function login(name){
   document.getElementById("gameScreen").style.display="block";
   if(name==="Tyson"){
     document.getElementById("adminNavBtn").style.display="";
-    document.getElementById("advanceBtn").style.display="";
-    document.getElementById("backBtn").style.display="";
   }
   renderAll();
   syncInterval=setInterval(refreshState,15000);
