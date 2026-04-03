@@ -62,70 +62,6 @@ nav button.active{color:var(--accent);background:rgba(255,180,0,.08)}
 .btn.danger{background:rgba(255,79,109,.08);border-color:rgba(255,79,109,.3);color:var(--down)}
 .sell-btn{background:rgba(255,79,109,.07);border:1px solid rgba(255,79,109,.25);color:var(--down);font-family:inherit;font-size:.7rem;font-weight:700;padding:.25rem .6rem;border-radius:5px;cursor:pointer;transition:all .2s}
 .sell-btn:hover{background:rgba(255,79,109,.15)}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sportfolio — AFL 2026</title>
-<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
-<style>
-:root {
-  --bg:#080b12; --surface:#111620; --surface2:#181f2e;
-  --border:#1e2d45; --accent:#FFB400; --blue:#4da6ff;
-  --up:#00c97a; --down:#ff4f6d; --text:#dde4f0; --muted:#637089; --dim:#3a4560;
-}
-*{margin:0;padding:0;box-sizing:border-box}
-body{background:var(--bg);color:var(--text);font-family:'DM Sans',system-ui,sans-serif;min-height:100vh}
-body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 60% 40% at 50% 0%,rgba(255,180,0,.05),transparent);pointer-events:none;z-index:0}
-input:focus{outline:none;border-color:var(--accent)!important}
-button:disabled{opacity:.3;cursor:not-allowed!important}
-::-webkit-scrollbar{width:4px}
-::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
-@keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-.page{display:none}.page.active{display:block;animation:fadeIn .25s ease}
-
-/* TEAM LOGO */
-.team-logo{width:22px;height:22px;object-fit:contain;vertical-align:middle;margin-right:.35rem;flex-shrink:0}
-.team-logo-sm{width:18px;height:18px;object-fit:contain;vertical-align:middle;flex-shrink:0}
-.team-logo-md{width:26px;height:26px;object-fit:contain;vertical-align:middle;margin-right:.4rem;flex-shrink:0}
-.team-logo-xs{width:16px;height:16px;object-fit:contain;vertical-align:middle;flex-shrink:0}
-
-/* LOGIN */
-.login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:2rem;position:relative;z-index:1}
-.login-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:2.5rem;width:100%;max-width:400px;text-align:center}
-.login-logo{font-family:'Bebas Neue',sans-serif;font-size:3.5rem;color:var(--accent);letter-spacing:.05em;line-height:1}
-.login-season{font-family:'Bebas Neue',sans-serif;font-size:1rem;color:var(--muted);letter-spacing:.15em;margin-bottom:.5rem}
-.login-sub{color:var(--muted);font-size:.85rem;margin-bottom:2rem;line-height:1.5}
-.player-btn{width:100%;padding:.9rem 1.1rem;margin-bottom:.6rem;background:var(--surface2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:.95rem;font-weight:600;cursor:pointer;transition:all .2s;display:flex;align-items:center;gap:.75rem;font-family:inherit}
-.player-btn:hover{border-color:var(--accent);color:var(--accent)}
-.player-btn .pval{margin-left:auto;font-family:'DM Mono',monospace;font-size:.78rem;color:var(--muted)}
-
-/* HEADER */
-header{position:sticky;top:0;z-index:100;background:rgba(8,11,18,.96);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 1.25rem;height:58px}
-.logo{font-family:'Bebas Neue',sans-serif;font-size:1.5rem;color:var(--accent);letter-spacing:.05em;line-height:1}
-.logo span{color:var(--text)}
-.logo small{font-family:'DM Sans',sans-serif;font-size:.58rem;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;display:block;margin-top:-2px;white-space:nowrap}
-nav{display:flex;gap:.2rem}
-nav button{background:none;border:none;color:var(--muted);font-family:inherit;font-size:.8rem;font-weight:500;padding:.42rem .85rem;border-radius:6px;cursor:pointer;transition:all .2s}
-nav button:hover{color:var(--text);background:var(--surface)}
-nav button.active{color:var(--accent);background:rgba(255,180,0,.08)}
-.hdr-right{display:flex;align-items:center;gap:.75rem}
-.round-badge{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:.3rem .75rem;text-align:center;min-width:54px}
-.round-badge .rl{font-size:.55rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em}
-.round-badge .rv{font-family:'Bebas Neue',sans-serif;font-size:1.2rem;color:var(--accent);line-height:1.1}
-.sync-dot{width:6px;height:6px;border-radius:50%;background:var(--up);display:inline-block;animation:pulse 2s infinite;margin-right:.3rem}
-
-/* BUTTONS */
-.btn{background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:inherit;font-size:.78rem;font-weight:500;padding:.4rem .8rem;border-radius:6px;cursor:pointer;transition:all .2s}
-.btn:hover{border-color:var(--accent);color:var(--accent)}
-.btn.primary{background:var(--accent);border-color:var(--accent);color:#000;font-weight:700}
-.btn.primary:hover{background:#ffc933}
-.btn.sm{font-size:.72rem;padding:.32rem .65rem}
-.btn.danger{background:rgba(255,79,109,.08);border-color:rgba(255,79,109,.3);color:var(--down)}
-.sell-btn{background:rgba(255,79,109,.07);border:1px solid rgba(255,79,109,.25);color:var(--down);font-family:inherit;font-size:.7rem;font-weight:700;padding:.25rem .6rem;border-radius:5px;cursor:pointer;transition:all .2s}
-.sell-btn:hover{background:rgba(255,79,109,.15)}
 .buy-btn{background:rgba(255,180,0,.08);border:1px solid rgba(255,180,0,.25);color:var(--accent);font-family:inherit;font-size:.7rem;font-weight:700;padding:.25rem .6rem;border-radius:5px;cursor:pointer;transition:all .2s}
 .buy-btn:hover{background:rgba(255,180,0,.18);border-color:var(--accent)}
 
@@ -1730,6 +1666,9 @@ function renderRankings(){
 
   // Holdings to display — always use snapshot so in-progress trades are hidden from others
   const getDisplayHoldings=(name)=>{
+    // During lockout: show live holdings (trades revealed, round in progress)
+    if(isLocked) return gs.players[name].holdings;
+    // During trading window: show snapshot to hide in-progress trades from other players
     if(gs.snapshot&&gs.snapshot[name]&&gs.snapshot[name].holdings){
       return gs.snapshot[name].holdings;
     }
