@@ -304,12 +304,6 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
     </nav>
     <div class="hdr-right">
       <div style="font-size:.72rem;color:var(--muted)"><span class="sync-dot" id="syncDot"></span><span id="syncLabel">Live</span></div>
-      <div class="round-badge">
-        <div class="rl">Round</div>
-        <div class="rv" id="roundDisplay">PRE</div>
-      </div>
-      <button class="btn sm" onclick="logout()">← Switch</button>
-      <button id="adminNavBtn" onclick="showTab('admin',this)" style="display:none">⚙ Admin</button>
     </div>
   </header>
 
@@ -614,7 +608,8 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
       <!-- Round control strip — most important admin action, sits at top -->
       <div style="display:flex;gap:.75rem;align-items:center;margin-bottom:1.1rem;flex-wrap:wrap">
         <button class="btn primary" id="advanceBtn" onclick="advanceRound()" style="flex:1;padding:.75rem;font-size:.9rem;min-width:160px">Advance Round →</button>
-        <button class="btn danger" id="backBtn" onclick="backRound()" style="padding:.75rem;font-size:.9rem">← Back One Round</button>
+        <button class="btn danger" id="backBtn" onclick="backRound()" style="padding:.75rem;font-size:.9rem">← Back</button>
+        <button class="btn sm" onclick="logout()" style="padding:.75rem">⇄ Switch Player</button>
       </div>
       <div class="two-col">
         <div class="card">
@@ -1589,7 +1584,6 @@ function getNextRoundName(r){return r===1?"Opening Round":"Round "+(r-1);}
 
 function updateHeaderUI(){
   const gs=gameState;
-  document.getElementById("roundDisplay").textContent=getRoundLabel(gs.round);
   document.getElementById("adminRoundNum").textContent=getNextRoundName(gs.round+1);
   const now=Date.now();
   const deadline=gs.tradeDeadline?new Date(gs.tradeDeadline).getTime():null;
