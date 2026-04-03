@@ -1185,6 +1185,27 @@ app.post("/api/admin/backfill-history", async (req, res) => {
   res.json({ success: true, state: gs });
 });
 
+// Admin: save manual ladder forecast for Price Predictions chart
+app.post("/api/admin/forecast", async (req, res) => {
+  const { playerName, round, ladder } = req.body;
+  if (playerName !== "Tyson") return res.status(403).json({ error: "Admin only" });
+  const gs = await loadState();
+  gs.forecasts = gs.forecasts || {};
+  gs.forecasts[round] = ladder; // [{name, pos}]
+  await saveState(gs);
+  res.json({ success: true, state: gs });
+});
+
+// Admin: clear a forecast round
+app.delete("/api/admin/forecast/:round", async (req, res) => {
+  const { playerName } = req.body;
+  if (playerName !== "Tyson") return res.status(403).json({ error: "Admin only" });
+  const gs = await loadState();
+  if (gs.forecasts) delete gs.forecasts[req.params.round];
+  await saveState(gs);
+  res.json({ success: true, state: gs });
+});
+
 // Admin: generate AI headlines
 app.post("/api/admin/generate-headlines", async (req, res) => {
   const { playerName } = req.body;
