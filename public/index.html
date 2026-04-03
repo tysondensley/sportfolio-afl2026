@@ -303,7 +303,6 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
       <button id="adminNavBtn" onclick="showTab('admin',this)" style="display:none">⚙ Admin</button>
     </nav>
     <div class="hdr-right">
-      <div style="font-size:.72rem;color:var(--muted)"><span class="sync-dot" id="syncDot"></span><span id="syncLabel">Live</span></div>
     </div>
   </header>
 
@@ -360,6 +359,7 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
       <div class="card">
         <div class="card-hd" style="padding:.6rem 1.1rem">
           <div class="card-title" style="white-space:nowrap">Ladder & Share Prices</div>
+          <div style="font-size:.65rem;color:var(--muted)"><span class="sync-dot" id="syncDot"></span><span id="syncLabel">—</span></div>
         </div>
 
         <!-- DESKTOP TABLE -->
@@ -928,9 +928,9 @@ async function refreshState(){
       const t=new Date(data.liveUpdatedAt);
       const mins=Math.floor((Date.now()-t)/60000);
       const timeStr=mins<1?"just now":mins<60?`${mins}m ago`:`${Math.floor(mins/60)}h ago`;
-      document.getElementById("syncLabel").textContent=`Live · ${timeStr}`;
+      document.getElementById("syncLabel").textContent=`Updated ${timeStr}`;
     } else {
-      document.getElementById("syncLabel").textContent="Live";
+      document.getElementById("syncLabel").textContent="Not yet updated";
     }
   } catch(e){
     document.getElementById("syncDot").style.background="var(--down)";
