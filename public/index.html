@@ -860,11 +860,9 @@ async function initLogin(){
   const container=document.getElementById("loginButtons");
   container.innerHTML="";
   HUMAN_PLAYERS.forEach(name=>{
-    const p=gameState?.players[name];
-    const snap=gameState?.snapshot?.[name];const total=snap?snap.total:(p?getTotal(p):10000);
     const btn=document.createElement("button");
     btn.className="player-btn";
-    btn.innerHTML=`<span style="font-size:1.2rem">👤</span><span>${name}</span><span class="pval">${fmt(total)}</span>`;
+    btn.innerHTML=`<span style="font-size:1.2rem">👤</span><span>${name}</span>`;
     btn.onclick=()=>login(name);
     container.appendChild(btn);
   });
