@@ -1280,7 +1280,7 @@ function drawMarketMovement(gs){
   // X axis labels
   ctx.textAlign='center'; ctx.fillStyle='#637089'; ctx.font="9px 'DM Mono',monospace";
   ladderHistory.forEach(p => {
-    ctx.fillText(p.round===0?'Pre':'R'+p.round, xScale(p.round), H-pad.b+12);
+    ctx.fillText(researchRoundLabel(p.round), xScale(p.round), H-pad.b+12);
   });
 
   // Draw lines — filtered teams only (or all if no filter)
@@ -1334,7 +1334,7 @@ function drawMarketMovement(gs){
     let nearest = ladderHistory[0]; let minDist = Infinity;
     ladderHistory.forEach(p => { const d=Math.abs(xScale(p.round)-mx); if(d<minDist){minDist=d;nearest=p;} });
     if(minDist > 40 || !nearest.ladder) return;
-    const label = nearest.round===0?'Pre-Season':'Round '+nearest.round;
+    const label = nearest.round===1?'Opening Round':nearest.round===0?'Pre-Season':'Round '+(nearest.round-1);
     const top3 = [...nearest.ladder].slice(0,3).map((t,i)=>`${i+1}. ${t.name}`).join(' · ');
     if(tooltipEl) tooltipEl.textContent = `${label} — Top 3: ${top3}`;
   };
