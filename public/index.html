@@ -522,10 +522,12 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
           </div>
           <div class="card-body" style="padding:.75rem">
             <!-- View toggle -->
-            <div style="display:flex;gap:.5rem;margin-bottom:.875rem">
+            <div style="display:flex;gap:.5rem;margin-bottom:.5rem">
               <button id="pgLineBtn" class="btn sm" style="background:rgba(255,180,0,.1);border-color:rgba(255,180,0,.35);color:var(--accent)" onclick="setPGView('line')">Line</button>
               <button id="pgBarBtn" class="btn sm" onclick="setPGView('bar')">Grouped Bars</button>
             </div>
+            <!-- Player filter pills -->
+            <div id="pgFilterWrap" style="display:flex;flex-wrap:wrap;gap:.35rem;margin-bottom:.875rem"></div>
             <div style="position:relative">
               <canvas id="portfolioGrowthChart" style="width:100%;display:block"></canvas>
               <div id="portfolioGrowthTooltip" style="font-size:.72rem;color:var(--muted);margin-top:.4rem;min-height:1.2em;text-align:center"></div>
@@ -665,6 +667,26 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
             </div>
           </div>
           <div class="card" style="margin-bottom:1rem">
+            <div class="card" style="margin-bottom:1rem">
+              <div class="card-hd">
+                <div class="card-title">Ladder Forecast</div>
+                <div style="font-size:.68rem;color:var(--muted)">Enter predicted ladder for future rounds</div>
+              </div>
+              <div class="card-body">
+                <p style="font-size:.75rem;color:var(--muted);margin-bottom:.75rem">Set your predicted ladder order for upcoming rounds — shows as dashed lines on the Price Predictions chart.</p>
+                <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.75rem;flex-wrap:wrap">
+                  <label style="font-size:.75rem;color:var(--muted)">Round:</label>
+                  <select id="forecastRoundSel" class="fix-select" onchange="renderForecastGrid()">
+                    <option value="5">R5</option><option value="6">R6</option><option value="7">R7</option>
+                    <option value="8">R8</option><option value="9">R9</option><option value="10">R10</option>
+                  </select>
+                  <button class="btn primary sm" onclick="saveForecast()">Save Forecast</button>
+                  <button class="btn sm danger" onclick="clearForecast()">Clear</button>
+                </div>
+                <div id="forecastInputs" style="font-size:.75rem;color:var(--muted)">Enter a position for each team (1–18):</div>
+                <div id="forecastGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:.3rem .75rem;margin-top:.5rem"></div>
+              </div>
+            </div>
             <div class="card" style="margin-bottom:1rem">
               <div class="card-hd">
                 <div class="card-title">Market Headlines</div>
@@ -1134,31 +1156,55 @@ function buildLadderHistory(gs){
   return points;
 }
 
+// Build full ladder history from gs.history entries — no live data, end-of-round only
+function buildLadderHistory(gs){
+  return (gs.history||[]).filter(h=>h.ladder).map(h=>({round:h.round,ladder:h.ladder}));
+}
+
+// Round label helper for Research — maps Sportfolio round numbers to human labels
+function researchRoundLabel(r){
+  if(r===0) return 'Start';
+  if(r===1) return 'OR'; // Opening Round
+  return 'R'+(r-1);     // R1 = after AFL Round 1, etc
+}
+
 function buildPortfolioHistory(gs){
   const history = gs.history || [];
-  const points = [{ round: 0, totals: ALL_PLAYERS.reduce((a,n)=>{ a[n]=10000; return a; }, {}) }];
-  history.forEach(h => points.push({ round: h.round, totals: h.totals }));
-
-  // Add live current values if locked
-  const deadline = gs.tradeDeadline ? new Date(gs.tradeDeadline).getTime() : null;
-  const isLocked = deadline && Date.now() > deadline;
-  if(isLocked && gs.round > 0){
-    const live = ALL_PLAYERS.reduce((a,n)=>{ a[n]=getTotal(gs.players[n]); return a; }, {});
-    points.push({ round: gs.round, totals: live, live: true });
-  }
-
+  // Start point at $10k for everyone
+  const points = [{ round:0, totals:ALL_PLAYERS.reduce((a,n)=>{ a[n]=10000; return a; },{}) }];
+  history.forEach(h => points.push({ round:h.round, totals:h.totals }));
   return points;
 }
 
+// Player colour palette — enough for 10 players
+const PLAYER_PALETTE=[
+  '#FFB400','#4da6ff','#00c97a','#ff4f6d','#a78bfa',
+  '#fb923c','#34d399','#f472b6','#60a5fa','#fbbf24'
+];
+function getPlayerColor(name){
+  const idx=ALL_PLAYERS.indexOf(name);
+  return PLAYER_PALETTE[idx%PLAYER_PALETTE.length];
+}
+
+let pgFilter=new Set(); // empty = show all players
+
 function setPGView(v){
   pgView=v;
-  document.getElementById("pgLineBtn").style.background=v==='line'?'rgba(255,180,0,.1)':'';
-  document.getElementById("pgLineBtn").style.borderColor=v==='line'?'rgba(255,180,0,.35)':'';
-  document.getElementById("pgLineBtn").style.color=v==='line'?'var(--accent)':'';
-  document.getElementById("pgBarBtn").style.background=v==='bar'?'rgba(255,180,0,.1)':'';
-  document.getElementById("pgBarBtn").style.borderColor=v==='bar'?'rgba(255,180,0,.35)':'';
-  document.getElementById("pgBarBtn").style.color=v==='bar'?'var(--accent)':'';
+  document.getElementById("pgLineBtn").style.cssText=v==='line'?'background:rgba(255,180,0,.1);border-color:rgba(255,180,0,.35);color:var(--accent)':'';
+  document.getElementById("pgBarBtn").style.cssText=v==='bar'?'background:rgba(255,180,0,.1);border-color:rgba(255,180,0,.35);color:var(--accent)':'';
   renderResearch();
+}
+
+function togglePGFilter(name){
+  if(pgFilter.has(name)) pgFilter.delete(name); else pgFilter.add(name);
+  const btn=document.getElementById('pgf_'+name);
+  if(btn){
+    const active=pgFilter.has(name);
+    btn.style.background=active?'rgba(255,180,0,.1)':'var(--surface2)';
+    btn.style.borderColor=active?'rgba(255,180,0,.35)':'var(--border)';
+    btn.style.color=active?'var(--accent)':'var(--muted)';
+  }
+  drawPortfolioGrowth(gameState);
 }
 
 function drawResearchCanvas(canvasId, drawFn){
@@ -1311,118 +1357,113 @@ function drawPortfolioGrowth(gs){
   const points = buildPortfolioHistory(gs);
   const tooltipEl = document.getElementById('portfolioGrowthTooltip');
   const legendEl = document.getElementById('portfolioGrowthLegend');
+  const filterEl = document.getElementById('pgFilterWrap');
+
+  // Build filter pills once
+  if(filterEl && filterEl.children.length===0){
+    filterEl.innerHTML=`<span style="font-size:.65rem;color:var(--muted);align-self:center;margin-right:.2rem">Filter:</span>`+
+      ALL_PLAYERS.map(n=>`<button onclick="togglePGFilter('${n}')" id="pgf_${n}" style="font-size:.6rem;padding:.18rem .5rem;border-radius:4px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);cursor:pointer;font-family:inherit">${n}${HUMAN_PLAYERS.includes(n)?'':' 🤖'}</button>`).join('');
+  }
 
   if(points.length < 2){
-    const r = drawResearchCanvas('portfolioGrowthChart',null);
-    if(r){ r.ctx.fillStyle='#637089'; r.ctx.font="13px 'DM Sans',sans-serif"; r.ctx.textAlign='center'; r.ctx.fillText('Data available after Round 1 advances',r.W/2,36); }
+    const r=drawResearchCanvas('portfolioGrowthChart',null);
+    if(r){r.ctx.fillStyle='#637089';r.ctx.font="13px 'DM Sans',sans-serif";r.ctx.textAlign='center';r.ctx.fillText('Data available after Round 1 advances',r.W/2,36);}
     return;
   }
 
-  const r = drawResearchCanvas('portfolioGrowthChart', null);
+  const activePlayers = pgFilter.size>0 ? ALL_PLAYERS.filter(n=>pgFilter.has(n)) : ALL_PLAYERS;
+  const r = drawResearchCanvas('portfolioGrowthChart',null);
   if(!r) return;
-  const { ctx, W, H } = r;
+  const {ctx,W,H} = r;
+  const pad={t:12,r:16,b:28,l:58};
+  const cW=W-pad.l-pad.r, cH=H-pad.t-pad.b;
 
-  const players = HUMAN_PLAYERS; // Research page shows humans only
-  const PCOLORS = { [HUMAN_PLAYERS[0]]:'#FFB400', [HUMAN_PLAYERS[1]]:'#4da6ff', [HUMAN_PLAYERS[2]]:'#00c97a' };
+  if(pgView==='line'){
+    const allVals=points.flatMap(p=>activePlayers.map(n=>p.totals[n]||0));
+    const minV=Math.min(...allVals)*0.97, maxV=Math.max(...allVals)*1.03;
+    const rounds=points.map(p=>p.round);
+    const minR=rounds[0], maxR=rounds[rounds.length-1];
+    const xScale=rv=>maxR===minR?pad.l+cW/2:pad.l+(rv-minR)/(maxR-minR)*cW;
+    const yScale=v=>pad.t+cH-(v-minV)/(maxV-minV)*cH;
 
-  const pad = { t:12, r:16, b:28, l:58 };
-  const cW = W - pad.l - pad.r;
-  const cH = H - pad.t - pad.b;
-
-  if(pgView === 'line'){
-    const allVals = points.flatMap(p => players.map(n => p.totals[n]||0));
-    const minV = Math.min(...allVals)*0.97, maxV = Math.max(...allVals)*1.03;
-    const rounds = points.map(p => p.round);
-    const minR = rounds[0], maxR = rounds[rounds.length-1];
-    const xScale = r => maxR===minR?pad.l+cW/2:pad.l+(r-minR)/(maxR-minR)*cW;
-    const yScale = v => pad.t+cH-(v-minV)/(maxV-minV)*cH;
-
-    // Grid
-    ctx.strokeStyle='rgba(30,45,69,.5)'; ctx.lineWidth=0.5;
-    [0.25,0.5,0.75,1].forEach(f => {
+    ctx.strokeStyle='rgba(30,45,69,.5)';ctx.lineWidth=0.5;
+    [0.25,0.5,0.75,1].forEach(f=>{
       const y=pad.t+cH*f;
-      ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(pad.l+cW,y); ctx.stroke();
-      const val=maxV-(maxV-minV)*f;
-      ctx.fillStyle='#637089'; ctx.font="9px 'DM Mono',monospace"; ctx.textAlign='right';
-      ctx.fillText('$'+Math.round(val/1000)+'k', pad.l-4, y+3);
+      ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(pad.l+cW,y);ctx.stroke();
+      ctx.fillStyle='#637089';ctx.font="9px 'DM Mono',monospace";ctx.textAlign='right';
+      ctx.fillText('$'+Math.round((maxV-(maxV-minV)*f)/1000)+'k',pad.l-4,y+3);
     });
+    ctx.textAlign='center';ctx.fillStyle='#637089';ctx.font="9px 'DM Mono',monospace";
+    points.forEach(p=>ctx.fillText(researchRoundLabel(p.round),xScale(p.round),H-pad.b+12));
 
-    // X labels
-    ctx.textAlign='center'; ctx.fillStyle='#637089'; ctx.font="9px 'DM Mono',monospace";
-    points.forEach(p => ctx.fillText(p.round===0?'Pre':'R'+p.round, xScale(p.round), H-pad.b+12));
-
-    // Lines
     let legendHtml='';
-    players.forEach(name => {
-      const color = PCOLORS[name]||'#637089';
+    activePlayers.forEach(name=>{
+      const color=getPlayerColor(name);
+      const isHuman=HUMAN_PLAYERS.includes(name);
       ctx.beginPath();
-      points.forEach((p,i) => {
-        const x=xScale(p.round); const y=yScale(p.totals[name]||10000);
+      points.forEach((p,i)=>{
+        const x=xScale(p.round),y=yScale(p.totals[name]||10000);
         i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
       });
-      ctx.strokeStyle=color; ctx.lineWidth=2.5; ctx.stroke();
+      ctx.strokeStyle=color;ctx.lineWidth=isHuman?2.5:1.2;ctx.globalAlpha=isHuman?1:0.5;ctx.stroke();ctx.globalAlpha=1;
       const last=points[points.length-1];
-      ctx.beginPath(); ctx.arc(xScale(last.round),yScale(last.totals[name]||10000),4,0,Math.PI*2);
-      ctx.fillStyle=color; ctx.fill();
-      legendHtml+=`<span style="display:inline-flex;align-items:center;gap:.3rem"><span style="width:18px;height:2.5px;background:${color};display:inline-block;border-radius:2px"></span><span style="color:var(--muted)">${name}</span></span>`;
+      ctx.beginPath();ctx.arc(xScale(last.round),yScale(last.totals[name]||10000),isHuman?4:2.5,0,Math.PI*2);
+      ctx.fillStyle=color;ctx.fill();
+      legendHtml+=`<span style="display:inline-flex;align-items:center;gap:.3rem"><span style="width:${isHuman?18:12}px;height:${isHuman?2.5:1.5}px;background:${color};display:inline-block;border-radius:2px;opacity:${isHuman?1:0.6}"></span><span style="color:${isHuman?'var(--text)':'var(--muted)'}">${name}</span></span>`;
     });
     if(legendEl) legendEl.innerHTML=legendHtml;
 
-    // Click tooltip
     const canvas=document.getElementById('portfolioGrowthChart');
     canvas.onclick=e=>{
       const rect=canvas.getBoundingClientRect();
       const mx=(e.clientX-rect.left)*(canvas.width/rect.width)/(window.devicePixelRatio||1);
-      let nearest=points[0]; let minDist=Infinity;
+      let nearest=points[0];let minDist=Infinity;
       points.forEach(p=>{const d=Math.abs(xScale(p.round)-mx);if(d<minDist){minDist=d;nearest=p;}});
       if(minDist>40) return;
-      const label=nearest.round===0?'Pre-Season':'Round '+nearest.round;
-      const vals=players.map(n=>`${n}: $${Math.round(nearest.totals[n]||0).toLocaleString()}`).join(' · ');
-      if(tooltipEl) tooltipEl.textContent=`${label} — ${vals}`;
+      const vals=activePlayers.map(n=>`${n}: $${Math.round(nearest.totals[n]||0).toLocaleString()}`).join(' · ');
+      if(tooltipEl) tooltipEl.textContent=`${researchRoundLabel(nearest.round)} — ${vals}`;
     };
 
   } else {
-    // Grouped bar chart
-    const rounds = points.slice(1); // skip pre-season for bars — not interesting
-    if(!rounds.length){ return; }
-    const allVals = rounds.flatMap(p=>players.map(n=>p.totals[n]||0));
-    const maxV = Math.max(...allVals)*1.05;
-    const barGroupW = cW/rounds.length;
-    const barW = Math.min(barGroupW*0.22, 18);
-    const gap = (barGroupW - barW*players.length) / 2;
+    // Grouped bar chart — x-axis = players, bars within each group = rounds
+    const rounds=points.slice(1); // skip start point
+    if(!rounds.length) return;
 
-    // Grid
-    ctx.strokeStyle='rgba(30,45,69,.5)'; ctx.lineWidth=0.5;
+    const roundColors=['#4da6ff','#00c97a','#FFB400','#ff4f6d','#a78bfa','#fb923c','#34d399','#f472b6','#60a5fa','#fbbf24'];
+    const allVals=rounds.flatMap(p=>activePlayers.map(n=>p.totals[n]||0));
+    const maxV=Math.max(...allVals,10000)*1.05;
+
+    const groupW=cW/activePlayers.length;
+    const barW=Math.min(groupW*0.8/rounds.length,14);
+    const groupPad=(groupW-barW*rounds.length)/2;
+
+    ctx.strokeStyle='rgba(30,45,69,.5)';ctx.lineWidth=0.5;
     [0.25,0.5,0.75,1].forEach(f=>{
       const y=pad.t+cH*f;
-      ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(pad.l+cW,y); ctx.stroke();
-      const val=maxV*(1-f);
-      ctx.fillStyle='#637089'; ctx.font="9px 'DM Mono',monospace"; ctx.textAlign='right';
-      ctx.fillText('$'+Math.round(val/1000)+'k',pad.l-4,y+3);
+      ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(pad.l+cW,y);ctx.stroke();
+      ctx.fillStyle='#637089';ctx.font="9px 'DM Mono',monospace";ctx.textAlign='right';
+      ctx.fillText('$'+Math.round(maxV*(1-f)/1000)+'k',pad.l-4,y+3);
     });
 
-    let legendHtml='';
-    rounds.forEach((p,ri)=>{
-      const groupX = pad.l + ri*barGroupW + gap;
-      players.forEach((name,pi)=>{
-        const color=PCOLORS[name]||'#637089';
+    activePlayers.forEach((name,pi)=>{
+      const groupX=pad.l+pi*groupW+groupPad;
+      rounds.forEach((p,ri)=>{
+        const color=roundColors[ri%roundColors.length];
         const val=p.totals[name]||0;
         const barH=(val/maxV)*cH;
-        const x=groupX+pi*barW;
-        const y=pad.t+cH-barH;
-        ctx.fillStyle=color;
-        ctx.globalAlpha=0.85;
-        ctx.fillRect(x,y,barW-1,barH);
+        ctx.fillStyle=color;ctx.globalAlpha=0.85;
+        ctx.fillRect(groupX+ri*barW,pad.t+cH-barH,barW-1,barH);
         ctx.globalAlpha=1;
       });
-      // X label
-      ctx.fillStyle='#637089'; ctx.font="9px 'DM Mono',monospace"; ctx.textAlign='center';
-      ctx.fillText('R'+p.round, pad.l+ri*barGroupW+barGroupW/2, H-pad.b+12);
+      // Player label under group
+      ctx.fillStyle='#637089';ctx.font="9px 'DM Mono',monospace";ctx.textAlign='center';
+      ctx.fillText(name,pad.l+pi*groupW+groupW/2,H-pad.b+12);
     });
 
-    players.forEach(name=>{
-      const color=PCOLORS[name]||'#637089';
-      legendHtml+=`<span style="display:inline-flex;align-items:center;gap:.3rem"><span style="width:12px;height:12px;background:${color};display:inline-block;border-radius:2px;opacity:.85"></span><span style="color:var(--muted)">${name}</span></span>`;
+    // Legend = rounds
+    let legendHtml='';
+    rounds.forEach((p,ri)=>{
+      legendHtml+=`<span style="display:inline-flex;align-items:center;gap:.3rem"><span style="width:12px;height:12px;background:${roundColors[ri%roundColors.length]};display:inline-block;border-radius:2px;opacity:.85"></span><span style="color:var(--muted)">${researchRoundLabel(p.round)}</span></span>`;
     });
     if(legendEl) legendEl.innerHTML=legendHtml;
   }
@@ -1436,109 +1477,94 @@ function drawPricePredictions(gs){
   const tooltipEl = document.getElementById('pricePredTooltip');
   const TOTAL_ROUNDS = 10;
 
-  if(ladderHistory.length < 2){
-    const r = drawResearchCanvas('pricePredChart',null);
-    if(r){ r.ctx.fillStyle='#637089'; r.ctx.font="13px 'DM Sans',sans-serif"; r.ctx.textAlign='center'; r.ctx.fillText('Predictions available after 2+ rounds of data',r.W/2,36); }
-    if(filterEl) filterEl.innerHTML='';
-    return;
-  }
+  const teams = gameState.ladder.map(t=>t.name);
 
-  const teams = gameState.ladder.map(t => t.name);
-
-  // Build filter pills
+  // Build filter pills once
   if(filterEl && filterEl.children.length===0){
     filterEl.innerHTML=`<span style="font-size:.65rem;color:var(--muted);align-self:center;margin-right:.2rem">Filter:</span>`+
       teams.map((t,i)=>`<button onclick="togglePPFilter('${t}')" id="ppf_${t.replace(/ /g,'_')}" style="font-size:.6rem;padding:.18rem .5rem;border-radius:4px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);cursor:pointer;font-family:inherit">${t}</button>`).join('');
   }
 
-  const r = drawResearchCanvas('pricePredChart', null);
+  // Combine actual history + manual forecasts from gs.forecasts
+  const forecasts = gs.forecasts || {}; // { round: [{name, pos}] }
+  const allPoints = [...ladderHistory];
+  Object.entries(forecasts).forEach(([r,ladder])=>{
+    const rn=parseInt(r);
+    if(!allPoints.find(p=>p.round===rn)) allPoints.push({round:rn,ladder,forecast:true});
+  });
+  allPoints.sort((a,b)=>a.round-b.round);
+
+  if(allPoints.length < 1){
+    const r=drawResearchCanvas('pricePredChart',null);
+    if(r){r.ctx.fillStyle='#637089';r.ctx.font="13px 'DM Sans',sans-serif";r.ctx.textAlign='center';r.ctx.fillText('Data available after Round 1 advances',r.W/2,36);}
+    return;
+  }
+
+  const r=drawResearchCanvas('pricePredChart',null);
   if(!r) return;
-  const { ctx, W, H } = r;
-
+  const {ctx,W,H}=r;
   const pad={t:12,r:16,b:28,l:32};
-  const cW=W-pad.l-pad.r;
-  const cH=H-pad.t-pad.b;
+  const cW=W-pad.l-pad.r, cH=H-pad.t-pad.b;
 
-  // Extend x-axis to TOTAL_ROUNDS
-  const lastRound = ladderHistory[ladderHistory.length-1].round;
-  const futureRounds = [];
-  for(let rr=lastRound+1; rr<=TOTAL_ROUNDS; rr++) futureRounds.push(rr);
-
-  const minR=0, maxR=TOTAL_ROUNDS;
-  const xScale=r=>pad.l+(r-minR)/(maxR-minR)*cW;
+  const lastActualRound = ladderHistory.length>0?ladderHistory[ladderHistory.length-1].round:0;
+  const minR=allPoints[0].round, maxR=TOTAL_ROUNDS;
+  const xScale=rv=>pad.l+(rv-minR)/(maxR-minR)*cW;
   const yScale=pos=>pad.t+(pos-1)/17*cH;
 
   // Grid
-  ctx.strokeStyle='rgba(30,45,69,.5)'; ctx.lineWidth=0.5;
+  ctx.strokeStyle='rgba(30,45,69,.5)';ctx.lineWidth=0.5;
   [1,4,8,12,16,18].forEach(pos=>{
     const y=yScale(pos);
-    ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(pad.l+cW,y); ctx.stroke();
-    ctx.fillStyle='#637089'; ctx.font="9px 'DM Mono',monospace"; ctx.textAlign='right';
+    ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(pad.l+cW,y);ctx.stroke();
+    ctx.fillStyle='#637089';ctx.font="9px 'DM Mono',monospace";ctx.textAlign='right';
     ctx.fillText(pos,pad.l-4,y+3);
   });
 
-  // X labels — all rounds
-  ctx.textAlign='center'; ctx.fillStyle='#637089'; ctx.font="9px 'DM Mono',monospace";
-  for(let rr=0;rr<=TOTAL_ROUNDS;rr++) ctx.fillText(rr===0?'Pre':'R'+rr,xScale(rr),H-pad.b+12);
+  // X labels
+  ctx.textAlign='center';ctx.fillStyle='#637089';ctx.font="9px 'DM Mono',monospace";
+  for(let rr=minR;rr<=TOTAL_ROUNDS;rr++) ctx.fillText(researchRoundLabel(rr),xScale(rr),H-pad.b+12);
 
-  // Vertical divider between actual and predicted
-  ctx.strokeStyle='rgba(255,180,0,.2)'; ctx.lineWidth=1; ctx.setLineDash([3,3]);
-  ctx.beginPath(); ctx.moveTo(xScale(lastRound),pad.t); ctx.lineTo(xScale(lastRound),pad.t+cH); ctx.stroke();
-  ctx.setLineDash([]);
+  // Divider line between actual and forecast
+  if(lastActualRound>0 && lastActualRound<TOTAL_ROUNDS){
+    ctx.strokeStyle='rgba(255,180,0,.25)';ctx.lineWidth=1;ctx.setLineDash([3,3]);
+    ctx.beginPath();ctx.moveTo(xScale(lastActualRound),pad.t);ctx.lineTo(xScale(lastActualRound),pad.t+cH);ctx.stroke();
+    ctx.setLineDash([]);
+  }
 
-  const activeFilt = ppFilter.size>0?ppFilter:new Set(teams);
+  const activeFilt=ppFilter.size>0?ppFilter:new Set(teams);
   let legendHtml='';
 
   teams.forEach((teamName,ti)=>{
     if(!activeFilt.has(teamName)) return;
     const color=getTeamColor(ti);
 
-    // Get historical positions
-    const histPositions = ladderHistory.map(p=>{
-      if(!p.ladder) return null;
-      const idx=p.ladder.findIndex(t=>t.name===teamName);
-      return idx===-1?null:{round:p.round,pos:idx+1};
-    }).filter(Boolean);
+    // Separate actual vs forecast segments
+    const actualPts=allPoints.filter(p=>!p.forecast&&p.ladder).map(p=>({round:p.round,pos:p.ladder.findIndex(t=>t.name===teamName)+1})).filter(p=>p.pos>0);
+    const forecastPts=allPoints.filter(p=>p.forecast&&p.ladder).map(p=>({round:p.round,pos:p.ladder.findIndex(t=>t.name===teamName)+1})).filter(p=>p.pos>0);
 
-    if(histPositions.length===0) return;
-
-    // Draw actual line (solid)
-    ctx.beginPath();
-    histPositions.forEach((pt,i)=>{
-      const x=xScale(pt.round); const y=yScale(pt.pos);
-      i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
-    });
-    ctx.strokeStyle=color; ctx.lineWidth=1.5; ctx.globalAlpha=0.85; ctx.stroke(); ctx.globalAlpha=1;
-
-    // Predict future positions using linear regression on recent rounds
-    if(futureRounds.length>0 && histPositions.length>=2){
-      // Simple linear regression
-      const n=histPositions.length;
-      const sumX=histPositions.reduce((s,p)=>s+p.round,0);
-      const sumY=histPositions.reduce((s,p)=>s+p.pos,0);
-      const sumXY=histPositions.reduce((s,p)=>s+p.round*p.pos,0);
-      const sumX2=histPositions.reduce((s,p)=>s+p.round*p.round,0);
-      const slope=(n*sumXY-sumX*sumY)/(n*sumX2-sumX*sumX);
-      const intercept=(sumY-slope*sumX)/n;
-
-      const lastActual=histPositions[histPositions.length-1];
-
-      // Draw dashed projected line
+    // Draw actual (solid)
+    if(actualPts.length>0){
       ctx.beginPath();
-      ctx.moveTo(xScale(lastActual.round),yScale(lastActual.pos));
-      futureRounds.forEach(rr=>{
-        const projPos=Math.max(1,Math.min(18,Math.round(intercept+slope*rr)));
-        ctx.lineTo(xScale(rr),yScale(projPos));
-      });
-      ctx.strokeStyle=color; ctx.lineWidth=1.5; ctx.globalAlpha=0.45;
-      ctx.setLineDash([4,3]); ctx.stroke();
-      ctx.setLineDash([]); ctx.globalAlpha=1;
+      actualPts.forEach((pt,i)=>i===0?ctx.moveTo(xScale(pt.round),yScale(pt.pos)):ctx.lineTo(xScale(pt.round),yScale(pt.pos)));
+      ctx.strokeStyle=color;ctx.lineWidth=1.5;ctx.globalAlpha=0.9;ctx.stroke();ctx.globalAlpha=1;
+      const lp=actualPts[actualPts.length-1];
+      ctx.beginPath();ctx.arc(xScale(lp.round),yScale(lp.pos),3,0,Math.PI*2);ctx.fillStyle=color;ctx.fill();
+    }
+
+    // Draw forecast (dashed) — connect from last actual point
+    const bridgePts=[...(actualPts.length?[actualPts[actualPts.length-1]]:[]),...forecastPts];
+    if(bridgePts.length>1){
+      ctx.beginPath();
+      bridgePts.forEach((pt,i)=>i===0?ctx.moveTo(xScale(pt.round),yScale(pt.pos)):ctx.lineTo(xScale(pt.round),yScale(pt.pos)));
+      ctx.strokeStyle=color;ctx.lineWidth=1.5;ctx.globalAlpha=0.5;ctx.setLineDash([4,3]);ctx.stroke();
+      ctx.setLineDash([]);ctx.globalAlpha=1;
     }
 
     legendHtml+=`<span style="display:inline-flex;align-items:center;gap:.3rem"><span style="width:14px;height:2px;background:${color};display:inline-block;border-radius:2px"></span><span style="color:var(--muted)">${teamName}</span></span>`;
   });
 
   if(legendEl) legendEl.innerHTML=legendHtml;
+  if(tooltipEl&&!gs.forecasts) tooltipEl.textContent='Add forecast rounds via Admin → Ladder Forecast to see projections';
 }
 
 function togglePPFilter(team){
@@ -2391,6 +2417,7 @@ function renderRankings(){
 function renderAdmin(){
   loadResearchLog();
   renderHeadlineEditors();
+  renderForecastGrid();
   updateSquiggleStatus();
   const gs=gameState;
   const inputs=document.getElementById("adminInputs");
@@ -2474,6 +2501,45 @@ async function triggerAIPreseason(){
   showToast("success","AI Researching...","Pre-season trades in progress.");
   try{const data=await api("/api/admin/ai-preseason","POST",{playerName:"Tyson"});gameState=data.state;renderAll();loadResearchLog();showToast("success","Done","AI pre-season trades complete.");}
   catch(e){showToast("error","Failed",e.message);}
+}
+
+function renderForecastGrid(){
+  const gs=gameState;
+  const grid=document.getElementById('forecastGrid');
+  if(!grid) return;
+  const round=parseInt(document.getElementById('forecastRoundSel')?.value||5);
+  const existing=(gs.forecasts&&gs.forecasts[round])||[];
+  grid.innerHTML=gs.ladder.map(t=>{
+    const entry=existing.find(e=>e.name===t.name);
+    return `<div style="display:flex;align-items:center;gap:.4rem">
+      ${teamLogo(t.name,'team-logo-sm')}
+      <span style="flex:1;font-size:.72rem">${t.name}</span>
+      <input type="number" min="1" max="18" id="fc_${t.name.replace(/ /g,'_')}" value="${entry?entry.pos:''}" class="admin-input" style="width:36px">
+    </div>`;
+  }).join('');
+}
+
+async function saveForecast(){
+  const round=parseInt(document.getElementById('forecastRoundSel').value);
+  const ladder=gameState.ladder.map(t=>{
+    const val=parseInt(document.getElementById('fc_'+t.name.replace(/ /g,'_'))?.value||0);
+    return{name:t.name,pos:val||0};
+  }).filter(e=>e.pos>0);
+  if(!ladder.length){showToast('error','No data','Enter at least one position.');return;}
+  try{
+    const data=await api('/api/admin/forecast','POST',{playerName:'Tyson',round,ladder});
+    gameState=data.state;renderResearch();
+    showToast('success','Forecast saved',`Round ${round} predictions updated.`);
+  }catch(e){showToast('error','Failed',e.message);}
+}
+
+async function clearForecast(){
+  const round=document.getElementById('forecastRoundSel').value;
+  try{
+    const data=await api(`/api/admin/forecast/${round}`,'DELETE',{playerName:'Tyson'});
+    gameState=data.state;renderResearch();renderForecastGrid();
+    showToast('success','Cleared',`Round ${round} forecast removed.`);
+  }catch(e){showToast('error','Failed',e.message);}
 }
 
 function renderHeadlineEditors(){
