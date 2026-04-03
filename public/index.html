@@ -1201,7 +1201,7 @@ function drawMarketMovement(gs){
     return;
   }
 
-  const teams = AFL_TEAMS.map(t => t.name);
+  const teams = gameState.ladder.map(t => t.name);
 
   // Build filter pills
   if(filterEl && filterEl.children.length === 0){
@@ -1443,7 +1443,7 @@ function drawPricePredictions(gs){
     return;
   }
 
-  const teams = AFL_TEAMS.map(t=>t.name);
+  const teams = gameState.ladder.map(t => t.name);
 
   // Build filter pills
   if(filterEl && filterEl.children.length===0){
