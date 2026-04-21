@@ -1110,6 +1110,39 @@ app.post("/api/admin/fetch-ladder", async (req, res) => {
   res.json({ success: true, state: gs });
 });
 
+// Admin: accept client-side Squiggle fetch result and apply to state
+// Used when the server IP is blocked by Cloudflare — browser fetches instead
+app.post("/api/admin/apply-squiggle", async (req, res) => {
+  const { playerName, standings } = req.body;
+  if (playerName !== "Tyson") return res.status(403).json({ error: "Admin only" });
+  if (!standings || !Array.isArray(standings)) return res.status(400).json({ error: "standings array required" });
+
+  try {
+    const sorted = [...standings].sort((a, b) => a.rank - b.rank);
+    const newLadder = sorted.map(s => {
+      const ourName = SQUIGGLE_NAME_MAP[s.name] || s.name;
+      const teamInfo = AFL_TEAMS.find(t => t.name === ourName) || { emoji: "🏉" };
+      const wins = s.wins || 0;
+      const losses = s.losses || 0;
+      const draws = s.draws || 0;
+      const played = wins + losses + draws;
+      const pts = (wins * 4) + (draws * 2);
+      const pct = s.percentage ? parseFloat(s.percentage.toFixed(1)) : 100;
+      return { name: ourName, emoji: teamInfo.emoji, wins, losses, draws, played, pts, pct };
+    });
+
+    const gs = await loadState();
+    gs.prevLadder = JSON.parse(JSON.stringify(gs.ladder));
+    gs.ladder = newLadder;
+    gs.liveUpdatedAt = new Date().toISOString();
+    await saveState(gs);
+    res.json({ success: true, state: gs });
+  } catch(e) {
+    console.error("apply-squiggle error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Public: get live update timestamp (so frontend knows when to refresh)
 app.get("/api/live-status", async (req, res) => {
   const gs = await loadState();
