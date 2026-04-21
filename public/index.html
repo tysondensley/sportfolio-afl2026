@@ -2462,10 +2462,29 @@ async function restoreBackup(input){
   input.value="";
 }
 
+const SQUIGGLE_NAME_MAP_CLIENT = {
+  "Adelaide":"Adelaide","Brisbane":"Brisbane Lions","Brisbane Lions":"Brisbane Lions",
+  "Carlton":"Carlton","Collingwood":"Collingwood","Essendon":"Essendon",
+  "Fremantle":"Fremantle","Geelong":"Geelong","Gold Coast":"Gold Coast Suns",
+  "Gold Coast Suns":"Gold Coast Suns","Greater Western Sydney":"GWS Giants",
+  "GWS":"GWS Giants","GWS Giants":"GWS Giants","Hawthorn":"Hawthorn",
+  "Melbourne":"Melbourne","North Melbourne":"North Melbourne",
+  "Port Adelaide":"Port Adelaide","Richmond":"Richmond","St Kilda":"St Kilda",
+  "Sydney":"Sydney Swans","Sydney Swans":"Sydney Swans","West Coast":"West Coast",
+  "Western Bulldogs":"Western Bulldogs"
+};
+
 async function fetchLiveLadder(){
   const btn=event.target;btn.disabled=true;btn.textContent="Fetching...";
   try{
-    const data=await api("/api/admin/fetch-ladder","POST",{playerName:"Tyson"});
+    const year=2026;
+    const round=gameState.round;
+    const url=`https://api.squiggle.com.au/?q=standings;year=${year};round=${round}`;
+    const resp=await fetch(url);
+    if(!resp.ok) throw new Error(`Squiggle returned ${resp.status}`);
+    const squiggleData=await resp.json();
+    if(!squiggleData.standings||!squiggleData.standings.length) throw new Error("No standings data from Squiggle");
+    const data=await api("/api/admin/apply-squiggle","POST",{playerName:"Tyson",standings:squiggleData.standings});
     gameState=data.state;renderAll();updateSquiggleStatus();
     showToast("success","Ladder updated","Live ladder fetched from Squiggle.");
   } catch(e){showToast("error","Fetch failed",e.message);}
