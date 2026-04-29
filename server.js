@@ -139,63 +139,6 @@ function sportfolioRoundToAFLRound(sportfolioRound) {
   return sportfolioRound; // 1:1 mapping — OR=round 1, R1=round 2, etc in AFL numbering
 }
 
-let squigglePoller = null;
-
-async function startSquigglePolling() {
-  if (squigglePoller) return; // Already running
-  console.log("Starting Squiggle live ladder polling...");
-
-  squigglePoller = setInterval(async () => {
-    try {
-      const gs = await loadState();
-      const deadline = gs.tradeDeadline ? new Date(gs.tradeDeadline).getTime() : null;
-      const isLocked = deadline && Date.now() > deadline;
-
-      // Only poll during lockout (round in progress)
-      if (!isLocked || gs.round >= TOTAL_ROUNDS) {
-        stopSquigglePolling();
-        return;
-      }
-
-      const aflRound = sportfolioRoundToAFLRound(gs.round);
-      const newLadder = await fetchSquiggleLadder(aflRound);
-      if (!newLadder) return;
-
-      // Check if ladder has actually changed
-      const oldOrder = gs.ladder.map(t => t.name).join(",");
-      const newOrder = newLadder.map(t => t.name).join(",");
-      const oldPcts  = gs.ladder.map(t => t.pct).join(",");
-      const newPcts  = newLadder.map(t => t.pct).join(",");
-
-      if (oldOrder === newOrder && oldPcts === newPcts) {
-        console.log("Squiggle: no ladder change detected");
-        return;
-      }
-
-      console.log(`Squiggle update: ladder changed for round ${aflRound}`);
-      gs.ladder = newLadder;
-      gs.liveUpdatedAt = new Date().toISOString();
-
-      // Daily headline refresh
-      if (await maybeRefreshHeadlines(gs)) {
-        console.log("Refreshing AI headlines (daily cycle)...");
-        gs.headlines = await generateAIHeadlines(gs);
-      }
-
-      await saveState(gs);
-    } catch(e) {
-      console.error("Squiggle poller error:", e.message);
-    }
-  }, 5 * 60 * 1000); // Every 5 minutes
-}
-
-function stopSquigglePolling() {
-  if (squigglePoller) {
-    clearInterval(squigglePoller);
-    squigglePoller = null;
-    console.log("Squiggle polling stopped.");
-  }
-}
 
 const PRICE_SCALE = {
   1:6.12, 2:5.56, 3:5.05, 4:4.59, 5:4.18,
@@ -802,13 +745,6 @@ Respond ONLY with a valid JSON array of exactly 5 strings, no markdown, no expla
   };
 }
 
-// Check if headlines need daily refresh (called on each Squiggle poll cycle too)
-async function maybeRefreshHeadlines(gs) {
-  const headlines = gs.headlines;
-  if (!headlines || !headlines.generatedAt) return true; // needs generation
-  const age = Date.now() - new Date(headlines.generatedAt).getTime();
-  return age > 24 * 60 * 60 * 1000; // older than 24 hours
-}
 
 // ── API ROUTES ────────────────────────────────────────────────
 
@@ -1087,11 +1023,6 @@ app.post("/api/admin/deadline", async (req, res) => {
   gs.tradeDeadline = deadline; // ISO datetime string
   gs.status = "trading";
   await saveState(gs);
-  // Start Squiggle polling if deadline is within 1 hour or already passed
-  const dl = new Date(deadline).getTime();
-  if (dl - Date.now() < 60 * 60 * 1000) {
-    startSquigglePolling();
-  }
   res.json({ success: true, state: gs });
 });
 
@@ -1110,37 +1041,32 @@ app.post("/api/admin/fetch-ladder", async (req, res) => {
   res.json({ success: true, state: gs });
 });
 
-// Admin: accept client-side Squiggle fetch result and apply to state
-// Used when the server IP is blocked by Cloudflare — browser fetches instead
+// Admin: accept client-side Squiggle result and apply to game state
 app.post("/api/admin/apply-squiggle", async (req, res) => {
-  const { playerName, standings } = req.body;
+  const { playerName, ladder } = req.body;
   if (playerName !== "Tyson") return res.status(403).json({ error: "Admin only" });
-  if (!standings || !Array.isArray(standings)) return res.status(400).json({ error: "standings array required" });
-
-  try {
-    const sorted = [...standings].sort((a, b) => a.rank - b.rank);
-    const newLadder = sorted.map(s => {
-      const ourName = SQUIGGLE_NAME_MAP[s.name] || s.name;
-      const teamInfo = AFL_TEAMS.find(t => t.name === ourName) || { emoji: "🏉" };
-      const wins = s.wins || 0;
-      const losses = s.losses || 0;
-      const draws = s.draws || 0;
-      const played = wins + losses + draws;
-      const pts = (wins * 4) + (draws * 2);
-      const pct = s.percentage ? parseFloat(s.percentage.toFixed(1)) : 100;
-      return { name: ourName, emoji: teamInfo.emoji, wins, losses, draws, played, pts, pct };
-    });
-
-    const gs = await loadState();
-    gs.prevLadder = JSON.parse(JSON.stringify(gs.ladder));
-    gs.ladder = newLadder;
-    gs.liveUpdatedAt = new Date().toISOString();
-    await saveState(gs);
-    res.json({ success: true, state: gs });
-  } catch(e) {
-    console.error("apply-squiggle error:", e.message);
-    res.status(500).json({ error: e.message });
-  }
+  if (!Array.isArray(ladder) || ladder.length === 0) return res.status(400).json({ error: "Invalid ladder data" });
+  const gs = await loadState();
+  const newLadder = ladder.map((s, i) => {
+    const teamInfo = AFL_TEAMS.find(t => t.name === s.name) || { emoji: "🏉" };
+    const wins = s.wins || 0;
+    const losses = s.losses || 0;
+    const draws = s.draws || 0;
+    return {
+      name: s.name,
+      emoji: teamInfo.emoji,
+      wins, losses, draws,
+      played: wins + losses + draws,
+      pts: (wins * 4) + (draws * 2),
+      pct: s.pct || 100,
+      pos: i + 1,
+    };
+  });
+  gs.prevLadder = JSON.parse(JSON.stringify(gs.ladder));
+  gs.ladder = newLadder;
+  gs.liveUpdatedAt = new Date().toISOString();
+  await saveState(gs);
+  res.json({ success: true, state: gs });
 });
 
 // Public: get live update timestamp (so frontend knows when to refresh)
@@ -1152,7 +1078,6 @@ app.get("/api/live-status", async (req, res) => {
     round: gs.round,
     isLocked,
     liveUpdatedAt: gs.liveUpdatedAt || null,
-    pollingActive: !!squigglePoller,
   });
 });
 
@@ -1281,19 +1206,8 @@ initDb().then(async () => {
   app.listen(PORT, "0.0.0.0", function() {
     console.log("Sportfolio AFL 2026 running on port " + PORT);
   });
-  // Resume Squiggle polling if we're already in a lockout period
-  try {
-    const gs = await loadState();
-    const deadline = gs.tradeDeadline ? new Date(gs.tradeDeadline).getTime() : null;
-    const isLocked = deadline && Date.now() > deadline;
-    if (isLocked && gs.round < TOTAL_ROUNDS) {
-      console.log("Resuming Squiggle polling (lockout already active)");
-      startSquigglePolling();
-    }
-  } catch(e) {
-    console.error("Failed to check polling state:", e.message);
-  }
 }).catch(err => {
   console.error("Failed to initialise database:", err);
   process.exit(1);
 });
+
