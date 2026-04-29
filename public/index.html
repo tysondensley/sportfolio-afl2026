@@ -216,7 +216,7 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
 .admin-row{display:flex;align-items:center;justify-content:space-between;padding:.42rem 0;border-bottom:1px solid rgba(30,45,69,.3);font-size:.8rem}
 .admin-row:last-child{border-bottom:none}
 .admin-input{width:38px;background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:'DM Mono',monospace;font-size:.78rem;padding:.28rem .4rem;border-radius:5px;text-align:center;outline:none}
-.admin-input.pct{width:56px}
+.admin-input.pct{width:72px}
 .admin-input:focus{border-color:var(--accent)}
 .opp-chip{display:inline-flex;flex-direction:column;align-items:center;justify-content:center;width:24px;height:28px;border-radius:5px;background:var(--surface2);border:1px solid var(--border);cursor:default;position:relative;margin-right:2px;overflow:hidden}
 .opp-chip:hover::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 4px);left:50%;transform:translateX(-50%);background:#1a2540;border:1px solid var(--border);color:var(--text);font-size:.68rem;white-space:nowrap;padding:.25rem .5rem;border-radius:5px;pointer-events:none;z-index:200}
@@ -643,7 +643,7 @@ main{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:1.25rem}
               <button class="btn primary sm" onclick="fetchLiveLadder()">⚡ Fetch Now</button>
             </div>
             <div class="card-body">
-              <p style="font-size:.75rem;color:var(--muted)">Automatically polls Squiggle every 5 minutes during lockout. Use Fetch Now to manually pull the latest ladder.</p>
+              <p style="font-size:.75rem;color:var(--muted)">Fetches the current AFL ladder from Squiggle directly from your browser. Hit Fetch Now after each round to update prices.</p>
               <div id="squiggleStatus" style="font-size:.72rem;color:var(--muted);margin-top:.5rem"></div>
             </div>
           </div>
@@ -922,7 +922,9 @@ async function refreshState(){
   try{
     const data=await api("/api/state");
     gameState=data;
-    renderAll();
+const adminTab=document.getElementById("tab-admin");
+const editing=adminTab&&adminTab.contains(document.activeElement)&&["INPUT","SELECT","TEXTAREA"].includes(document.activeElement.tagName);
+if(!editing) renderAll();
     document.getElementById("syncDot").style.background="var(--up)";
     if(data.liveUpdatedAt){
       const t=new Date(data.liveUpdatedAt);
@@ -2474,18 +2476,34 @@ const SQUIGGLE_NAME_MAP_CLIENT = {
   "Western Bulldogs":"Western Bulldogs"
 };
 
+const SQUIGGLE_NAME_MAP={
+  "Adelaide":"Adelaide","Brisbane":"Brisbane Lions","Brisbane Lions":"Brisbane Lions",
+  "Carlton":"Carlton","Collingwood":"Collingwood","Essendon":"Essendon",
+  "Fremantle":"Fremantle","Geelong":"Geelong","Gold Coast":"Gold Coast Suns",
+  "Gold Coast Suns":"Gold Coast Suns","Greater Western Sydney":"GWS Giants",
+  "GWS":"GWS Giants","GWS Giants":"GWS Giants","Hawthorn":"Hawthorn",
+  "Melbourne":"Melbourne","North Melbourne":"North Melbourne",
+  "Port Adelaide":"Port Adelaide","Richmond":"Richmond","St Kilda":"St Kilda",
+  "Sydney":"Sydney Swans","Sydney Swans":"Sydney Swans",
+  "West Coast":"West Coast","Western Bulldogs":"Western Bulldogs"
+};
+
 async function fetchLiveLadder(){
   const btn=event.target;btn.disabled=true;btn.textContent="Fetching...";
   try{
-    const year=2026;
-    const round=gameState.round;
-    const url=`https://api.squiggle.com.au/?q=standings;year=${year};round=${round}`;
-    const resp=await fetch(url);
-    if(!resp.ok) throw new Error(`Squiggle returned ${resp.status}`);
-    const squiggleData=await resp.json();
-    if(!squiggleData.standings||!squiggleData.standings.length) throw new Error("No standings data from Squiggle");
-    const data=await api("/api/admin/apply-squiggle","POST",{playerName:"Tyson",standings:squiggleData.standings});
-    gameState=data.state;renderAll();updateSquiggleStatus();
+    const aflRound=gameState.round;
+    const res=await fetch(`https://api.squiggle.com.au/?q=standings;year=2026;round=${aflRound}`);
+    if(!res.ok) throw new Error(`Squiggle returned ${res.status}`);
+    const data=await res.json();
+    if(!data.standings||!data.standings.length) throw new Error("No standings data returned");
+    const sorted=[...data.standings].sort((a,b)=>a.rank-b.rank);
+    const ladder=sorted.map(s=>({
+      name:SQUIGGLE_NAME_MAP[s.name]||s.name,
+      wins:s.wins||0,losses:s.losses||0,draws:s.draws||0,
+      pct:s.percentage?parseFloat(s.percentage.toFixed(1)):100
+    }));
+    const result=await api("/api/admin/apply-squiggle","POST",{playerName:"Tyson",ladder});
+    gameState=result.state;renderAll();updateSquiggleStatus();
     showToast("success","Ladder updated","Live ladder fetched from Squiggle.");
   } catch(e){showToast("error","Fetch failed",e.message);}
   finally{btn.disabled=false;btn.textContent="⚡ Fetch Now";}
@@ -2493,15 +2511,13 @@ async function fetchLiveLadder(){
 
 function updateSquiggleStatus(){
   const el=document.getElementById("squiggleStatus");if(!el) return;
-  const gs=gameState;
-  const deadline=gs.tradeDeadline?new Date(gs.tradeDeadline).getTime():null;
-  const isLocked=deadline&&Date.now()>deadline;
-  if(gs.liveUpdatedAt){
-    const t=new Date(gs.liveUpdatedAt);
-    el.textContent=`Last fetched: ${t.toLocaleTimeString()} · ${isLocked?"Auto-polling active":"Polling paused (trading open)"}`;
-    el.style.color=isLocked?"var(--up)":"var(--muted)";
+  if(gameState.liveUpdatedAt){
+    const t=new Date(gameState.liveUpdatedAt);
+    el.textContent=`Last fetched: ${t.toLocaleTimeString()}`;
+    el.style.color="var(--up)";
   } else {
-    el.textContent=isLocked?"Auto-polling active — no update yet.":"Polling starts automatically at lockout.";
+    el.textContent="Not yet fetched this round.";
+    el.style.color="var(--muted)";
   }
 }
 
