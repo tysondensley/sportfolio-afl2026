@@ -921,10 +921,10 @@ async function api(path,method="GET",body=null){
 async function refreshState(){
   try{
     const data=await api("/api/state");
-    gameState=data;
-const adminTab=document.getElementById("tab-admin");
-const editing=adminTab&&adminTab.contains(document.activeElement)&&["INPUT","SELECT","TEXTAREA"].includes(document.activeElement.tagName);
-if(!editing) renderAll();
+        gameState=data;
+    const adminTab=document.getElementById("tab-admin");
+    const editing=adminTab&&adminTab.contains(document.activeElement)&&["INPUT","SELECT","TEXTAREA"].includes(document.activeElement.tagName);
+    if(!editing) renderAll();
     document.getElementById("syncDot").style.background="var(--up)";
     if(data.liveUpdatedAt){
       const t=new Date(data.liveUpdatedAt);
